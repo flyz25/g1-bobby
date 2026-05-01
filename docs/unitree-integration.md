@@ -181,6 +181,15 @@ GET /unitree/execution-plans
 These records differ from `/unitree/command-plan`: they show the normalized
 ROS2 or SDK execution target actually consumed by the selected stub transport.
 
+The same stub transports also expose execution outcomes:
+
+```text
+GET /unitree/execution-result
+GET /unitree/execution-results
+```
+
+For the current plan-backed stubs, that outcome is `status=stub_emitted`.
+
 In WSL2, `eth0` is usually a NAT interface. DDS multicast to a physical robot
 may require WSL mirrored networking, a bridged adapter setup, or running this
 container on a native Linux host connected to the robot network.

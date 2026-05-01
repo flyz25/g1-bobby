@@ -63,3 +63,4 @@ def test_plan_stub_cli_prints_emitted_plans(capsys) -> None:
     payload = json.loads(captured.out)
     assert payload["emitted_plans"][0]["transport"] == "sdk_plan_stub"
     assert payload["emitted_plans"][0]["payload"]["operation"] == "switch_mode"
+    assert payload["execution_results"][0]["status"] == "stub_emitted"

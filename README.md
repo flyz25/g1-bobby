@@ -160,6 +160,13 @@ http://localhost:8010/unitree/execution-plan
 http://localhost:8010/unitree/execution-plans
 ```
 
+Dan latest execution outcome untuk stub transport:
+
+```text
+http://localhost:8010/unitree/execution-result
+http://localhost:8010/unitree/execution-results
+```
+
 Rejected-command audit juga tersedia di:
 
 ```text

@@ -11,6 +11,7 @@ from .events import (
     AckEvent,
     CommandPlanEvent,
     ExecutionPlanEvent,
+    ExecutionResultEvent,
     ErrorCode,
     RejectedCommandEvent,
     RejectedCommandRecord,
@@ -32,6 +33,8 @@ from .unitree_command import (
     UnitreeCommandPlanRecord,
     UnitreeExecutionPlan,
     UnitreeExecutionPlanRecord,
+    UnitreeExecutionResult,
+    UnitreeExecutionResultRecord,
     translate_unitree_command,
 )
 
@@ -39,6 +42,7 @@ __all__ = [
     "AckEvent",
     "CommandPlanEvent",
     "ExecutionPlanEvent",
+    "ExecutionResultEvent",
     "CommandEnvelope",
     "CommandType",
     "ControlMode",
@@ -64,5 +68,7 @@ __all__ = [
     "UnitreeCommandPlanRecord",
     "UnitreeExecutionPlan",
     "UnitreeExecutionPlanRecord",
+    "UnitreeExecutionResult",
+    "UnitreeExecutionResultRecord",
     "translate_unitree_command",
 ]

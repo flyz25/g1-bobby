@@ -175,6 +175,10 @@ may also include `unitree_execution_plan`, which carries:
 - `execution_plan.target`
 - `execution_plan.payload`
 
+`ack` may also include `unitree_execution_result`, which carries the current
+transport outcome record, for example `status=stub_emitted` on plan-backed stub
+transports.
+
 ### `command_plan`
 
 The audit endpoint replays retained command-plan history on connect and then
@@ -186,6 +190,12 @@ When the selected adapter transport emits a concrete execution stub plan, the
 same audit endpoint also replays retained execution-plan history on connect and
 then streams one `execution_plan` event for each newly recorded transport-facing
 execution plan.
+
+### `execution_result`
+
+When the selected adapter transport records a concrete execution outcome, the
+same audit endpoint also replays retained execution-result history on connect
+and then streams one `execution_result` event for each newly recorded outcome.
 
 ### `rejected_command`
 

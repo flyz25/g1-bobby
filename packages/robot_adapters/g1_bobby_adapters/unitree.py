@@ -5,7 +5,7 @@ from importlib import import_module
 from time import time
 
 from g1_bobby_contracts.commands import CommandEnvelope
-from g1_bobby_contracts.unitree_command import UnitreeExecutionPlan
+from g1_bobby_contracts.unitree_command import UnitreeExecutionPlan, UnitreeExecutionResult
 from g1_bobby_contracts.state import ControlMode, RobotState
 
 from .unitree_transport import (
@@ -49,6 +49,7 @@ class UnitreeAdapter:
         self.config = config or UnitreeAdapterConfig()
         self._publisher = publisher or self._create_publisher(self.config.command_transport)
         self._last_execution_plan: UnitreeExecutionPlan | None = None
+        self._last_execution_result: UnitreeExecutionResult | None = None
         self._state = RobotState(
             connected=False,
             estop_engaged=True,
@@ -133,9 +134,13 @@ class UnitreeAdapter:
         except UnitreeTransportConfigurationError as exc:
             raise UnitreeAdapterConfigurationError(str(exc)) from exc
         self._last_execution_plan = None
+        self._last_execution_result = None
         consume_execution_plan = getattr(self._publisher, "consume_last_execution_plan", None)
         if callable(consume_execution_plan):
             self._last_execution_plan = consume_execution_plan()
+        consume_execution_result = getattr(self._publisher, "consume_last_execution_result", None)
+        if callable(consume_execution_result):
+            self._last_execution_result = consume_execution_result()
 
         if str(command.type) == "heartbeat":
             self._state.last_heartbeat_at = command.timestamp
@@ -164,3 +169,10 @@ class UnitreeAdapter:
         plan = self._last_execution_plan.model_copy(deep=True)
         self._last_execution_plan = None
         return plan
+
+    def consume_last_execution_result(self) -> UnitreeExecutionResult | None:
+        if self._last_execution_result is None:
+            return None
+        result = self._last_execution_result.model_copy(deep=True)
+        self._last_execution_result = None
+        return result

@@ -6,7 +6,11 @@ from typing import Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from .state import RobotState
-from .unitree_command import UnitreeCommandPlanRecord, UnitreeExecutionPlanRecord
+from .unitree_command import (
+    UnitreeCommandPlanRecord,
+    UnitreeExecutionPlanRecord,
+    UnitreeExecutionResultRecord,
+)
 from .unitree import UnitreeDdsSnapshot
 
 
@@ -14,6 +18,7 @@ class ServerEventType(StrEnum):
     ACK = "ack"
     COMMAND_PLAN = "command_plan"
     EXECUTION_PLAN = "execution_plan"
+    EXECUTION_RESULT = "execution_result"
     REJECT = "reject"
     REJECTED_COMMAND = "rejected_command"
     STATE = "state"
@@ -40,6 +45,7 @@ class AckEvent(BaseModel):
     message: str = "accepted"
     unitree_command_plan: UnitreeCommandPlanRecord | None = None
     unitree_execution_plan: UnitreeExecutionPlanRecord | None = None
+    unitree_execution_result: UnitreeExecutionResultRecord | None = None
 
 
 class RejectEvent(BaseModel):
@@ -83,6 +89,13 @@ class ExecutionPlanEvent(BaseModel):
     unitree_execution_plan: UnitreeExecutionPlanRecord
 
 
+class ExecutionResultEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal[ServerEventType.EXECUTION_RESULT] = ServerEventType.EXECUTION_RESULT
+    unitree_execution_result: UnitreeExecutionResultRecord
+
+
 class StateEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -105,6 +118,7 @@ ServerEvent = Union[
     AckEvent,
     CommandPlanEvent,
     ExecutionPlanEvent,
+    ExecutionResultEvent,
     RejectEvent,
     RejectedCommandEvent,
     StateEvent,

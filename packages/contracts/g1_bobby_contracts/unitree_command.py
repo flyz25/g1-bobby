@@ -50,6 +50,26 @@ class UnitreeExecutionPlanRecord(BaseModel):
     execution_plan: UnitreeExecutionPlan
 
 
+class UnitreeExecutionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    transport: str
+    command_type: str
+    status: str
+    target: str
+    detail: str
+
+
+class UnitreeExecutionResultRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: int = Field(ge=1)
+    recorded_at: float
+    source: str
+    stale: bool = False
+    execution_result: UnitreeExecutionResult
+
+
 def translate_unitree_command(command: CommandEnvelope) -> UnitreeCommandPlan:
     if command.type == CommandType.HEARTBEAT:
         return UnitreeCommandPlan(
