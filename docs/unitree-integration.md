@@ -158,6 +158,12 @@ The API writes the latest accepted Unitree snapshot to
 cached snapshot during startup so `/unitree/state`, `/state`, and operator
 telemetry can recover immediately even before the next DDS post arrives.
 
+Served `unitree_state` payloads include:
+
+- `source=live` for snapshots received from the current DDS->API flow
+- `source=restored` for snapshots loaded from cache during API startup
+- `stale=true` when `timestamp_s` is older than `G1_BOBBY_UNITREE_STATE_TTL_S`
+
 Override the scene when needed:
 
 ```bash

@@ -67,6 +67,12 @@ def _format_unitree_suffix(event: dict[str, Any]) -> str:
     low_state = sample_counts.get("low_state")
     sport_mode_state = sample_counts.get("sport_mode_state")
     details: list[str] = []
+    source = unitree_state.get("source")
+    if isinstance(source, str):
+        details.append(f"source={source}")
+    stale = unitree_state.get("stale")
+    if isinstance(stale, bool) and stale:
+        details.append("stale=true")
     if isinstance(low_state, int | float):
         details.append(f"low={int(low_state)}")
     if isinstance(sport_mode_state, int | float):

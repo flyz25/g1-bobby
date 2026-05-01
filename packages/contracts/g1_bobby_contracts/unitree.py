@@ -32,6 +32,8 @@ class UnitreeDdsSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: str
+    source: str = "live"
+    stale: bool = False
     timestamp_s: float = Field(gt=0)
     dds: UnitreeDdsInfo
     sample_counts: UnitreeSampleCounts

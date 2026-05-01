@@ -7,23 +7,24 @@ from g1_bobby_api.app import create_app
 from g1_bobby_api.config import Settings
 
 
-UNITREE_SNAPSHOT = {
-    "status": "receiving",
-    "timestamp_s": 123.0,
-    "dds": {
-        "domain_id": 1,
-        "interface": "lo",
-        "robot": "g1",
-        "topics": {
-            "low_state": "rt/lowstate",
-            "sport_mode_state": "rt/sportmodestate",
+def unitree_snapshot(timestamp_s: float | None = None) -> dict[str, object]:
+    return {
+        "status": "receiving",
+        "timestamp_s": time() if timestamp_s is None else timestamp_s,
+        "dds": {
+            "domain_id": 1,
+            "interface": "lo",
+            "robot": "g1",
+            "topics": {
+                "low_state": "rt/lowstate",
+                "sport_mode_state": "rt/sportmodestate",
+            },
         },
-    },
-    "sample_counts": {"low_state": 1, "sport_mode_state": 1},
-    "ages_s": {"low_state": 0.0, "sport_mode_state": 0.0},
-    "low_state": {"motor_count": 35},
-    "sport_mode_state": {"position": [0, 0, 1.2]},
-}
+        "sample_counts": {"low_state": 1, "sport_mode_state": 1},
+        "ages_s": {"low_state": 0.0, "sport_mode_state": 0.0},
+        "low_state": {"motor_count": 35},
+        "sport_mode_state": {"position": [0, 0, 1.2]},
+    }
 
 
 def build_settings(tmp_path: Path, **kwargs) -> Settings:
@@ -81,12 +82,13 @@ def test_unitree_state_ingest_and_readback(tmp_path: Path) -> None:
         missing = client.get("/unitree/state")
         assert missing.status_code == 404
 
-        unauthorized = client.post("/unitree/state", json=UNITREE_SNAPSHOT)
+        snapshot = unitree_snapshot()
+        unauthorized = client.post("/unitree/state", json=snapshot)
         assert unauthorized.status_code == 401
 
         accepted = client.post(
             "/unitree/state",
-            json=UNITREE_SNAPSHOT,
+            json=snapshot,
             headers={"X-Operator-Token": "dev-operator-token"},
         )
         assert accepted.status_code == 200
@@ -104,6 +106,8 @@ def test_unitree_state_ingest_and_readback(tmp_path: Path) -> None:
         assert projected_state.status_code == 200
         assert projected_state.json()["state"]["pose_label"] == "unitree-g1 x=0.00 y=0.00 z=1.20"
         assert projected_state.json()["unitree_state"]["status"] == "receiving"
+        assert projected_state.json()["unitree_state"]["source"] == "live"
+        assert projected_state.json()["unitree_state"]["stale"] is False
 
         runtime = client.get("/runtime")
         assert runtime.json()["unitree_state"]["updates"] == 1
@@ -122,7 +126,7 @@ def test_unitree_state_is_restored_after_app_restart(tmp_path: Path) -> None:
     with TestClient(create_app(settings)) as client:
         accepted = client.post(
             "/unitree/state",
-            json=UNITREE_SNAPSHOT,
+            json=unitree_snapshot(),
             headers={"X-Operator-Token": "dev-operator-token"},
         )
         assert accepted.status_code == 200
@@ -131,10 +135,35 @@ def test_unitree_state_is_restored_after_app_restart(tmp_path: Path) -> None:
         restored_runtime = restarted_client.get("/runtime")
         assert restored_runtime.json()["unitree_state"]["status"] == "receiving"
         assert restored_runtime.json()["unitree_state"]["updates"] == 1
+        assert restored_runtime.json()["unitree_state"]["source"] == "restored"
+        assert restored_runtime.json()["unitree_state"]["stale"] is False
 
         restored_state = restarted_client.get("/state")
         assert restored_state.json()["state"]["pose_label"] == "unitree-g1 x=0.00 y=0.00 z=1.20"
         assert restored_state.json()["unitree_state"]["status"] == "receiving"
+        assert restored_state.json()["unitree_state"]["source"] == "restored"
+
+
+def test_restored_unitree_state_can_be_marked_stale(tmp_path: Path) -> None:
+    settings = build_settings(
+        tmp_path,
+        unitree_state_ttl_s=0.01,
+    )
+    with TestClient(create_app(settings)) as client:
+        accepted = client.post(
+            "/unitree/state",
+            json=unitree_snapshot(timestamp_s=time() - 5.0),
+            headers={"X-Operator-Token": "dev-operator-token"},
+        )
+        assert accepted.status_code == 200
+
+    with TestClient(create_app(settings)) as restarted_client:
+        restored_runtime = restarted_client.get("/runtime")
+        assert restored_runtime.json()["unitree_state"]["source"] == "restored"
+        assert restored_runtime.json()["unitree_state"]["stale"] is True
+
+        restored_state = restarted_client.get("/state")
+        assert restored_state.json()["state"]["connected"] is False
 
 
 def test_websocket_state_and_telemetry_include_unitree_snapshot(tmp_path: Path) -> None:
@@ -142,7 +171,7 @@ def test_websocket_state_and_telemetry_include_unitree_snapshot(tmp_path: Path) 
     with TestClient(create_app(settings)) as client:
         accepted = client.post(
             "/unitree/state",
-            json=UNITREE_SNAPSHOT,
+            json=unitree_snapshot(),
             headers={"X-Operator-Token": "dev-operator-token"},
         )
         assert accepted.status_code == 200
@@ -152,11 +181,14 @@ def test_websocket_state_and_telemetry_include_unitree_snapshot(tmp_path: Path) 
             assert state_event["type"] == "state"
             assert state_event["state"]["pose_label"] == "unitree-g1 x=0.00 y=0.00 z=1.20"
             assert state_event["unitree_state"]["status"] == "receiving"
+            assert state_event["unitree_state"]["source"] == "live"
+            assert state_event["unitree_state"]["stale"] is False
             assert state_event["unitree_state"]["low_state"]["motor_count"] == 35
 
             telemetry_event = websocket.receive_json()
             assert telemetry_event["type"] == "telemetry"
             assert telemetry_event["state"]["pose_label"] == "unitree-g1 x=0.00 y=0.00 z=1.20"
+            assert telemetry_event["unitree_state"]["source"] == "live"
             assert telemetry_event["unitree_state"]["sample_counts"]["low_state"] == 1
             assert telemetry_event["unitree_state"]["sport_mode_state"]["position"][2] == 1.2
 

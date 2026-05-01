@@ -145,7 +145,12 @@ G1_BOBBY_UNITREE_STATE_CACHE_PATH=.runtime/unitree_state.json
 The API persists the latest Unitree snapshot to
 `G1_BOBBY_UNITREE_STATE_CACHE_PATH`, so a plain API restart can restore
 `/unitree/state` and the read-only projected `/state` view even before the next
-listener post arrives.
+listener post arrives. Served `unitree_state` payloads now include:
+
+```text
+source=live|restored
+stale=true|false
+```
 
 WSLg should provide `DISPLAY`, `WAYLAND_DISPLAY`, and `/mnt/wslg`. RTX GPU
 acceleration is more relevant for the heavier IsaacLab path; MuJoCo is the

@@ -82,12 +82,13 @@ def test_format_event_summarizes_state_with_unitree_projection() -> None:
     rendered = format_event(
         '{"type":"state","state":{"connected":true,"mode":"manual","estop_engaged":false,'
         '"pose_label":"unitree-g1 x=0.00 y=0.00 z=1.20"},'
-        '"unitree_state":{"status":"receiving","sample_counts":{"low_state":12,"sport_mode_state":13}}}'
+        '"unitree_state":{"status":"receiving","source":"live","stale":false,'
+        '"sample_counts":{"low_state":12,"sport_mode_state":13}}}'
     )
 
     assert rendered == (
         "state connected=True mode=manual estop=False pose=unitree-g1 x=0.00 y=0.00 z=1.20 "
-        "[unitree=receiving low=12 sport=13]"
+        "[unitree=receiving source=live low=12 sport=13]"
     )
 
 
@@ -95,12 +96,13 @@ def test_format_event_summarizes_telemetry() -> None:
     rendered = format_event(
         '{"type":"telemetry","accepted_commands":3,"rejected_commands":1,'
         '"state":{"mode":"manual","pose_label":"unitree-g1 x=0.00 y=0.00 z=1.20"},'
-        '"unitree_state":{"status":"receiving","sample_counts":{"low_state":8,"sport_mode_state":9}}}'
+        '"unitree_state":{"status":"receiving","source":"restored","stale":true,'
+        '"sample_counts":{"low_state":8,"sport_mode_state":9}}}'
     )
 
     assert rendered == (
         "telemetry accepted=3 rejected=1 mode=manual pose=unitree-g1 x=0.00 y=0.00 z=1.20 "
-        "[unitree=receiving low=8 sport=9]"
+        "[unitree=receiving source=restored stale=true low=8 sport=9]"
     )
 
 

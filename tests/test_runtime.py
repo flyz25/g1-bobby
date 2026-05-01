@@ -23,6 +23,28 @@ def build_settings(tmp_path: Path, **kwargs) -> Settings:
     )
 
 
+def unitree_snapshot(timestamp_s: float | None = None) -> dict[str, object]:
+    from time import time as now
+
+    return {
+        "status": "receiving",
+        "timestamp_s": now() if timestamp_s is None else timestamp_s,
+        "dds": {
+            "domain_id": 1,
+            "interface": "lo",
+            "robot": "g1",
+            "topics": {
+                "low_state": "rt/lowstate",
+                "sport_mode_state": "rt/sportmodestate",
+            },
+        },
+        "sample_counts": {"low_state": 1, "sport_mode_state": 1},
+        "ages_s": {"low_state": 0.0, "sport_mode_state": 0.0},
+        "low_state": {"motor_count": 35},
+        "sport_mode_state": {"position": [0, 0, 1.2]},
+    }
+
+
 def test_default_settings_select_mock_adapter() -> None:
     settings = Settings(_env_file=None)
 
@@ -122,33 +144,22 @@ async def test_runtime_allows_only_one_operator_session(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_runtime_stores_unitree_state_snapshot(tmp_path: Path) -> None:
     runtime = await Runtime.create(build_settings(tmp_path))
-    snapshot = UnitreeDdsSnapshot.model_validate(
-        {
-            "status": "receiving",
-            "timestamp_s": 123.0,
-            "dds": {
-                "domain_id": 1,
-                "interface": "lo",
-                "robot": "g1",
-                "topics": {
-                    "low_state": "rt/lowstate",
-                    "sport_mode_state": "rt/sportmodestate",
-                },
-            },
-            "sample_counts": {"low_state": 1, "sport_mode_state": 1},
-            "ages_s": {"low_state": 0.0, "sport_mode_state": 0.0},
-            "low_state": {"motor_count": 35},
-            "sport_mode_state": {"position": [0, 0, 1.2]},
-        }
-    )
+    snapshot = UnitreeDdsSnapshot.model_validate(unitree_snapshot())
 
     try:
         await runtime.record_unitree_state(snapshot)
 
-        assert await runtime.get_unitree_state() == snapshot
+        restored = await runtime.get_unitree_state()
+        assert restored is not None
+        assert restored.status == "receiving"
+        assert restored.source == "live"
+        assert restored.stale is False
+        assert restored.low_state == snapshot.low_state
         status = await runtime.unitree_state_status()
         assert status["updates"] == 1
         assert status["status"] == "receiving"
+        assert status["source"] == "live"
+        assert status["stale"] is False
         assert status["age_s"] is not None
     finally:
         await runtime.adapter.disconnect()
@@ -159,20 +170,8 @@ async def test_runtime_projects_unitree_snapshot_into_display_state(tmp_path: Pa
     runtime = await Runtime.create(build_settings(tmp_path))
     snapshot = UnitreeDdsSnapshot.model_validate(
         {
-            "status": "receiving",
-            "timestamp_s": 456.0,
-            "dds": {
-                "domain_id": 1,
-                "interface": "lo",
-                "robot": "g1",
-                "topics": {
-                    "low_state": "rt/lowstate",
-                    "sport_mode_state": "rt/sportmodestate",
-                },
-            },
+            **unitree_snapshot(),
             "sample_counts": {"low_state": 10, "sport_mode_state": 10},
-            "ages_s": {"low_state": 0.0, "sport_mode_state": 0.0},
-            "low_state": {"motor_count": 35},
             "sport_mode_state": {"position": [0.12, -0.34, 1.28]},
         }
     )
@@ -182,7 +181,7 @@ async def test_runtime_projects_unitree_snapshot_into_display_state(tmp_path: Pa
 
         state = await runtime.get_display_state()
         assert state.connected is True
-        assert state.last_state_at == 456.0
+        assert state.last_state_at == snapshot.timestamp_s
         assert state.obstacle_distance_m is None
         assert state.pose_label == "unitree-g1 x=0.12 y=-0.34 z=1.28"
     finally:
@@ -196,20 +195,8 @@ async def test_runtime_persists_and_reloads_unitree_snapshot(tmp_path: Path) -> 
     runtime = await Runtime.create(settings)
     snapshot = UnitreeDdsSnapshot.model_validate(
         {
-            "status": "receiving",
-            "timestamp_s": 789.0,
-            "dds": {
-                "domain_id": 1,
-                "interface": "lo",
-                "robot": "g1",
-                "topics": {
-                    "low_state": "rt/lowstate",
-                    "sport_mode_state": "rt/sportmodestate",
-                },
-            },
+            **unitree_snapshot(),
             "sample_counts": {"low_state": 2, "sport_mode_state": 3},
-            "ages_s": {"low_state": 0.0, "sport_mode_state": 0.0},
-            "low_state": {"motor_count": 35},
             "sport_mode_state": {"position": [0.01, 0.02, 1.23]},
         }
     )
@@ -222,10 +209,17 @@ async def test_runtime_persists_and_reloads_unitree_snapshot(tmp_path: Path) -> 
 
     reloaded = await Runtime.create(settings)
     try:
-        assert await reloaded.get_unitree_state() == snapshot
+        restored = await reloaded.get_unitree_state()
+        assert restored is not None
+        assert restored.status == "receiving"
+        assert restored.source == "restored"
+        assert restored.stale is False
+        assert restored.low_state == snapshot.low_state
         assert (await reloaded.get_display_state()).pose_label == "unitree-g1 x=0.01 y=0.02 z=1.23"
         status = await reloaded.unitree_state_status()
         assert status["status"] == "receiving"
+        assert status["source"] == "restored"
+        assert status["stale"] is False
         assert status["updates"] == 1
     finally:
         await reloaded.adapter.disconnect()

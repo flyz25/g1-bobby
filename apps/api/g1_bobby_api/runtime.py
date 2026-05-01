@@ -26,7 +26,9 @@ class Runtime:
     unitree_state_updates: int = 0
     unitree_state_received_at: float | None = None
     unitree_state_cache_path: Path = field(default_factory=lambda: Path(".runtime/unitree_state.json"))
+    unitree_state_ttl_s: float = 2.0
     _unitree_state: UnitreeDdsSnapshot | None = field(default=None, init=False, repr=False)
+    _unitree_state_restored: bool = field(default=False, init=False, repr=False)
     _operator_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _unitree_state_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
@@ -43,6 +45,7 @@ class Runtime:
             safety=SafetyValidator(resolved_settings.safety_limits()),
             adapter_name=str(resolved_settings.robot_adapter),
             unitree_state_cache_path=resolved_settings.unitree_state_cache_path,
+            unitree_state_ttl_s=resolved_settings.unitree_state_ttl_s,
         )
         await runtime.load_persisted_unitree_state()
         return runtime
@@ -83,11 +86,17 @@ class Runtime:
             return state
 
         projected = state.model_copy(deep=True)
-        projected.connected = snapshot.status == "receiving"
+        projected.connected = snapshot.status == "receiving" and not snapshot.stale
         projected.last_state_at = snapshot.timestamp_s
         projected.pose_label = self._project_unitree_pose_label(snapshot)
         projected.obstacle_distance_m = None
         return projected
+
+    def _decorate_unitree_state(self, snapshot: UnitreeDdsSnapshot) -> UnitreeDdsSnapshot:
+        decorated = snapshot.model_copy(deep=True)
+        decorated.source = "restored" if self._unitree_state_restored else "live"
+        decorated.stale = (time() - snapshot.timestamp_s) > self.unitree_state_ttl_s
+        return decorated
 
     def _persist_unitree_state(self, snapshot: UnitreeDdsSnapshot) -> None:
         self.unitree_state_cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -98,6 +107,7 @@ class Runtime:
     async def record_unitree_state(self, snapshot: UnitreeDdsSnapshot) -> None:
         async with self._unitree_state_lock:
             self._unitree_state = snapshot
+            self._unitree_state_restored = False
             self.unitree_state_updates += 1
             self.unitree_state_received_at = time()
             self._persist_unitree_state(snapshot)
@@ -114,13 +124,14 @@ class Runtime:
 
         async with self._unitree_state_lock:
             self._unitree_state = snapshot
+            self._unitree_state_restored = True
             self.unitree_state_updates = 1
             self.unitree_state_received_at = time()
         return True
 
     async def get_unitree_state(self) -> UnitreeDdsSnapshot | None:
         async with self._unitree_state_lock:
-            return self._unitree_state.model_copy(deep=True) if self._unitree_state else None
+            return self._decorate_unitree_state(self._unitree_state) if self._unitree_state else None
 
     async def get_display_state(self) -> RobotState:
         state = await self.adapter.get_state()
@@ -131,9 +142,12 @@ class Runtime:
             age_s = None
             if self.unitree_state_received_at is not None:
                 age_s = round(time() - self.unitree_state_received_at, 3)
+            snapshot = self._decorate_unitree_state(self._unitree_state) if self._unitree_state else None
             return {
                 "updates": self.unitree_state_updates,
                 "last_received_at": self.unitree_state_received_at,
                 "age_s": age_s,
-                "status": self._unitree_state.status if self._unitree_state else "not_available",
+                "status": snapshot.status if snapshot else "not_available",
+                "source": snapshot.source if snapshot else None,
+                "stale": snapshot.stale if snapshot else None,
             }
