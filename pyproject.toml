@@ -8,7 +8,11 @@ dependencies = [
     "pydantic>=2.8.0,<3.0.0",
     "pydantic-settings>=2.4.0,<3.0.0",
     "uvicorn[standard]>=0.30.0,<1.0.0",
+    "websockets>=10.4,<17.0",
 ]
+
+[project.scripts]
+g1-bobby-operator = "g1_bobby_operator_cli.main:main"
 
 [build-system]
 requires = ["setuptools>=75.0.0"]
@@ -25,6 +29,7 @@ dev = [
 asyncio_mode = "auto"
 pythonpath = [
     "apps/api",
+    "apps/operator_cli",
     "packages/contracts",
     "packages/safety",
     "packages/robot_adapters",
@@ -37,6 +42,7 @@ line-length = 100
 [tool.setuptools.packages.find]
 where = [
     "apps/api",
+    "apps/operator_cli",
     "packages/contracts",
     "packages/safety",
     "packages/robot_adapters",

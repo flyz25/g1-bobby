@@ -45,6 +45,21 @@ pip install -e ".[dev]"
 pytest
 ```
 
+## Operator CLI
+
+Start the API, then send a safe mock nudge sequence:
+
+```bash
+uvicorn g1_bobby_api.app:app --host 0.0.0.0 --port 8010
+g1-bobby-operator
+```
+
+Run a JSONL command script with fresh timestamps:
+
+```bash
+g1-bobby-operator --script samples/operator_messages.jsonl
+```
+
 ## WebSocket
 
 Endpoint:
