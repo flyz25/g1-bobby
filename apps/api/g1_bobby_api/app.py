@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from pathlib import Path
 from typing import Annotated
 from typing import Callable
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from g1_bobby_adapters import describe_unitree_transport_capability
 from g1_bobby_contracts.events import StateEvent
@@ -22,6 +25,8 @@ from g1_bobby_contracts.unitree import UnitreeDdsSnapshot
 from .config import Settings
 from .runtime import Runtime
 from .websocket import router as websocket_router
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def create_lifespan(settings: Settings) -> Callable:
@@ -50,6 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(websocket_router)
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")
 
     def unitree_transport_capability_for_runtime() -> UnitreeTransportCapability | None:
         if str(app.state.settings.robot_adapter) != "unitree":
@@ -59,6 +65,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "online"}
+
+    @app.get("/", include_in_schema=False)
+    async def root() -> RedirectResponse:
+        return RedirectResponse(url="/dashboard", status_code=307)
+
+    @app.get("/dashboard", include_in_schema=False)
+    async def dashboard() -> FileResponse:
+        return FileResponse(STATIC_DIR / "dashboard.html")
 
     @app.get("/runtime")
     async def runtime_status() -> dict[str, object]:

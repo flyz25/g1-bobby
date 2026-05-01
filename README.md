@@ -23,6 +23,12 @@ Open:
 http://localhost:8010/health
 ```
 
+Operator dashboard:
+
+```text
+http://localhost:8010/dashboard
+```
+
 Runtime status:
 
 ```text

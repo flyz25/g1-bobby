@@ -42,6 +42,18 @@ def build_settings(tmp_path: Path, **kwargs) -> Settings:
 
 def test_health_and_state_endpoints(tmp_path: Path) -> None:
     with TestClient(create_app(build_settings(tmp_path))) as client:
+        dashboard_redirect = client.get("/", follow_redirects=False)
+        assert dashboard_redirect.status_code == 307
+        assert dashboard_redirect.headers["location"] == "/dashboard"
+
+        dashboard = client.get("/dashboard")
+        assert dashboard.status_code == 200
+        assert "G1 Bobby Operator" in dashboard.text
+
+        asset = client.get("/assets/dashboard.js")
+        assert asset.status_code == 200
+        assert "connectSocket" in asset.text
+
         health = client.get("/health")
         assert health.status_code == 200
         assert health.json() == {"status": "online"}

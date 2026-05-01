@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>G1 Bobby Operator</title>
+    <link rel="stylesheet" href="/assets/dashboard.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <h1>G1 Bobby Operator</h1>
+          <p id="connection-summary">disconnected</p>
+        </div>
+        <div class="session-controls">
+          <label class="field token-field">
+            <span>Token</span>
+            <input id="token-input" type="password" value="dev-operator-token" />
+          </label>
+          <div class="inline-actions">
+            <button id="connect-operator" class="primary" title="Connect operator socket">◎</button>
+            <button id="disconnect-operator" title="Disconnect operator socket">◌</button>
+            <button id="connect-audit" title="Connect audit socket">◉</button>
+            <button id="disconnect-audit" title="Disconnect audit socket">○</button>
+            <button id="refresh-all" title="Refresh data">↻</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="band status-band">
+          <div class="panel emphasis">
+            <div class="panel-header">
+              <h2>Runtime</h2>
+              <span id="runtime-updated" class="stamp">-</span>
+            </div>
+            <dl class="metric-grid" id="runtime-metrics"></dl>
+          </div>
+          <div class="panel emphasis">
+            <div class="panel-header">
+              <h2>Robot</h2>
+              <span id="state-updated" class="stamp">-</span>
+            </div>
+            <dl class="metric-grid" id="state-metrics"></dl>
+          </div>
+          <div class="panel emphasis">
+            <div class="panel-header">
+              <h2>Transport</h2>
+              <span id="transport-updated" class="stamp">-</span>
+            </div>
+            <dl class="metric-grid" id="transport-metrics"></dl>
+            <div id="transport-blockers" class="chips"></div>
+          </div>
+        </section>
+
+        <section class="band command-band">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Command</h2>
+              <span id="command-status" class="stamp">idle</span>
+            </div>
+            <div class="command-layout">
+              <div class="control-group">
+                <div class="group-title">Mode</div>
+                <div class="segmented">
+                  <button data-mode="idle" class="mode-button">Idle</button>
+                  <button data-mode="manual" class="mode-button">Manual</button>
+                </div>
+              </div>
+              <div class="control-group">
+                <div class="group-title">Motion</div>
+                <div class="velocity-grid">
+                  <label class="field">
+                    <span>Linear X</span>
+                    <input id="linear-x" type="number" step="0.05" value="0.10" />
+                  </label>
+                  <label class="field">
+                    <span>Linear Y</span>
+                    <input id="linear-y" type="number" step="0.05" value="0.00" />
+                  </label>
+                  <label class="field">
+                    <span>Angular Z</span>
+                    <input id="angular-z" type="number" step="0.05" value="0.00" />
+                  </label>
+                  <label class="field">
+                    <span>Duration ms</span>
+                    <input id="duration-ms" type="number" step="50" min="50" value="100" />
+                  </label>
+                </div>
+                <div class="inline-actions">
+                  <button id="send-heartbeat" title="Send heartbeat">♥</button>
+                  <button id="send-move" class="primary" title="Send move command">↑</button>
+                  <button id="send-stop" title="Send stop command">■</button>
+                </div>
+              </div>
+              <div class="control-group">
+                <div class="group-title">Safety</div>
+                <div class="inline-actions">
+                  <button id="send-estop" class="danger" title="Trigger emergency stop">⛔</button>
+                  <button id="send-reset-estop" title="Reset emergency stop">↺</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="band detail-band">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>State</h2>
+              <span class="stamp" id="telemetry-summary">-</span>
+            </div>
+            <pre id="state-json" class="json-view"></pre>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Unitree</h2>
+              <span class="stamp" id="unitree-summary">-</span>
+            </div>
+            <pre id="unitree-json" class="json-view"></pre>
+          </div>
+        </section>
+
+        <section class="band audit-band">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Operator Stream</h2>
+              <span class="stamp" id="operator-socket-state">closed</span>
+            </div>
+            <div id="operator-events" class="log-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Audit Stream</h2>
+              <span class="stamp" id="audit-socket-state">closed</span>
+            </div>
+            <div id="audit-events" class="log-list"></div>
+          </div>
+        </section>
+
+        <section class="band history-band">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Command Plans</h2>
+              <span class="stamp" id="command-plan-count">0</span>
+            </div>
+            <div id="command-plan-history" class="history-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Execution Results</h2>
+              <span class="stamp" id="execution-result-count">0</span>
+            </div>
+            <div id="execution-result-history" class="history-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Rejected Commands</h2>
+              <span class="stamp" id="rejection-count">0</span>
+            </div>
+            <div id="rejection-history" class="history-list"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="/assets/dashboard.js"></script>
+  </body>
+</html>
