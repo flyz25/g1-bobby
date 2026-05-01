@@ -53,6 +53,21 @@ def test_settings_build_safety_limits() -> None:
     assert limits.heartbeat_ttl_s == 1.5
 
 
+def test_settings_build_command_gate_limits() -> None:
+    settings = Settings(
+        _env_file=None,
+        command_max_age_s=0.25,
+        command_future_tolerance_s=0.1,
+        command_max_commands_per_second=4,
+    )
+
+    limits = settings.command_gate_limits()
+
+    assert limits.max_age_s == 0.25
+    assert limits.future_tolerance_s == 0.1
+    assert limits.max_commands_per_second == 4
+
+
 def test_adapter_factory_rejects_unknown_adapter() -> None:
     with pytest.raises(ValueError, match="unsupported robot adapter"):
         create_robot_adapter("simulator")
@@ -66,6 +81,28 @@ async def test_runtime_create_uses_mock_by_default() -> None:
         assert runtime.adapter_name == "mock"
         assert isinstance(runtime.adapter, MockRobotAdapter)
         assert runtime.safety.limits.max_linear_mps == 0.35
+        assert runtime.accepted_commands == 0
+        assert runtime.rejected_commands == 0
+        assert runtime.active_operator_connected is False
+    finally:
+        await runtime.adapter.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_runtime_allows_only_one_operator_session() -> None:
+    runtime = await Runtime.create(Settings(_env_file=None))
+
+    try:
+        assert await runtime.claim_operator_session("session-1")
+        assert runtime.active_operator_connected is True
+        assert not await runtime.claim_operator_session("session-2")
+
+        await runtime.release_operator_session("session-2")
+        assert runtime.active_operator_connected is True
+
+        await runtime.release_operator_session("session-1")
+        assert runtime.active_operator_connected is False
+        assert await runtime.claim_operator_session("session-2")
     finally:
         await runtime.adapter.disconnect()
 

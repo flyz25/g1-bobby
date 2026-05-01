@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+from uuid import uuid4
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter, ValidationError
@@ -14,6 +15,8 @@ from g1_bobby_contracts import (
     StateEvent,
     TelemetryEvent,
 )
+
+from .command_gate import CommandGate
 
 router = APIRouter()
 command_adapter = TypeAdapter(CommandEnvelope)
@@ -28,9 +31,11 @@ async def operator_socket(websocket: WebSocket) -> None:
     token = websocket.query_params.get("token")
     settings = websocket.app.state.settings
     runtime = websocket.app.state.runtime
+    session_id = str(uuid4())
 
     if token != settings.operator_token:
         await websocket.accept()
+        runtime.record_rejected_command()
         await send_event(
             websocket,
             RejectEvent(code=ErrorCode.AUTH_FAILED, reason="invalid operator token"),
@@ -39,6 +44,19 @@ async def operator_socket(websocket: WebSocket) -> None:
         return
 
     await websocket.accept()
+    if not await runtime.claim_operator_session(session_id):
+        runtime.record_rejected_command()
+        await send_event(
+            websocket,
+            RejectEvent(
+                code=ErrorCode.SESSION_BUSY,
+                reason="another operator session is already connected",
+            ),
+        )
+        await websocket.close(code=1013)
+        return
+
+    command_gate = CommandGate(settings.command_gate_limits())
     telemetry_task = asyncio.create_task(send_telemetry(websocket))
 
     try:
@@ -48,7 +66,7 @@ async def operator_socket(websocket: WebSocket) -> None:
             try:
                 command = command_adapter.validate_python(message)
             except ValidationError as exc:
-                runtime.rejected_commands += 1
+                runtime.record_rejected_command()
                 await send_event(
                     websocket,
                     RejectEvent(
@@ -59,10 +77,23 @@ async def operator_socket(websocket: WebSocket) -> None:
                 )
                 continue
 
+            gate_decision = command_gate.validate_and_record(command)
+            if not gate_decision.accepted:
+                runtime.record_rejected_command()
+                await send_event(
+                    websocket,
+                    RejectEvent(
+                        seq=command.seq,
+                        code=gate_decision.code or ErrorCode.INVALID_MESSAGE,
+                        reason=gate_decision.reason,
+                    ),
+                )
+                continue
+
             state = await runtime.adapter.get_state()
             decision = runtime.safety.validate(command, state)
             if not decision.accepted:
-                runtime.rejected_commands += 1
+                runtime.record_rejected_command()
                 await send_event(
                     websocket,
                     RejectEvent(
@@ -76,7 +107,7 @@ async def operator_socket(websocket: WebSocket) -> None:
             try:
                 await runtime.adapter.execute(command)
             except Exception as exc:  # pragma: no cover - future real adapter boundary
-                runtime.rejected_commands += 1
+                runtime.record_rejected_command()
                 await send_event(
                     websocket,
                     RejectEvent(
@@ -87,6 +118,7 @@ async def operator_socket(websocket: WebSocket) -> None:
                 )
                 continue
 
+            runtime.record_accepted_command()
             await send_event(websocket, AckEvent(seq=command.seq, command_type=str(command.type)))
     except WebSocketDisconnect:
         pass
@@ -94,6 +126,7 @@ async def operator_socket(websocket: WebSocket) -> None:
         telemetry_task.cancel()
         with suppress(asyncio.CancelledError):
             await telemetry_task
+        await runtime.release_operator_session(session_id)
 
 
 async def send_telemetry(websocket: WebSocket) -> None:
@@ -105,8 +138,7 @@ async def send_telemetry(websocket: WebSocket) -> None:
             websocket,
             TelemetryEvent(
                 state=await runtime.adapter.get_state(),
-                accepted_commands=len(runtime.adapter.accepted_commands),
+                accepted_commands=runtime.accepted_commands,
                 rejected_commands=runtime.rejected_commands,
             ),
         )
-

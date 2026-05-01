@@ -22,9 +22,16 @@ ws://localhost:8010/ws/operator?token=dev-operator-token
 Common fields:
 
 - `type`: command type.
-- `seq`: client sequence number.
+- `seq`: client sequence number. It must increase within a WebSocket session.
 - `timestamp`: Unix timestamp from client.
 - `payload`: type-specific object.
+
+The server rejects stale, future-dated, replayed, and rate-limited commands
+before safety validation. Defaults:
+
+- max command age: `1.0s`
+- future timestamp tolerance: `0.25s`
+- max commands per second per operator socket: `20`
 
 ## Commands
 
@@ -121,6 +128,17 @@ Modes: `idle`, `manual`, `assist`.
   "reason": "operator heartbeat is stale"
 }
 ```
+
+Reject codes:
+
+- `auth_failed`
+- `invalid_message`
+- `rate_limited`
+- `replayed_command`
+- `safety_rejected`
+- `session_busy`
+- `stale_command`
+- `execution_failed`
 
 ### `state` and `telemetry`
 

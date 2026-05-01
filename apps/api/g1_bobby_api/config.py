@@ -8,6 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from g1_bobby_adapters import UnitreeAdapterConfig
 from g1_bobby_safety import SafetyLimits
 
+from .command_gate import CommandGateLimits
+
 
 class RobotAdapterName(StrEnum):
     MOCK = "mock"
@@ -32,6 +34,10 @@ class Settings(BaseSettings):
     safety_state_ttl_s: float = Field(default=1.0, gt=0.0)
     safety_heartbeat_ttl_s: float = Field(default=2.0, gt=0.0)
 
+    command_max_age_s: float = Field(default=1.0, gt=0.0)
+    command_future_tolerance_s: float = Field(default=0.25, ge=0.0)
+    command_max_commands_per_second: int = Field(default=20, gt=0)
+
     def unitree_config(self) -> UnitreeAdapterConfig:
         return UnitreeAdapterConfig(
             network_interface=self.unitree_network_interface,
@@ -46,4 +52,11 @@ class Settings(BaseSettings):
             min_obstacle_distance_m=self.safety_min_obstacle_distance_m,
             state_ttl_s=self.safety_state_ttl_s,
             heartbeat_ttl_s=self.safety_heartbeat_ttl_s,
+        )
+
+    def command_gate_limits(self) -> CommandGateLimits:
+        return CommandGateLimits(
+            max_age_s=self.command_max_age_s,
+            future_tolerance_s=self.command_future_tolerance_s,
+            max_commands_per_second=self.command_max_commands_per_second,
         )

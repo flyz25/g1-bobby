@@ -4,6 +4,9 @@ The MVP is fail-closed.
 
 Movement commands are rejected unless all conditions are true:
 
+- command sequence number is increasing
+- command timestamp is fresh and not too far in the future
+- operator socket is within rate limits
 - robot is connected
 - e-stop is clear
 - robot mode is `manual`
@@ -22,6 +25,8 @@ Movement commands are rejected unless all conditions are true:
 - state TTL: `1s`
 - heartbeat TTL: `2s`
 - minimum obstacle distance: `0.5m`
+- max command age: `1s`
+- future command tolerance: `0.25s`
+- max command rate: `20 commands/s`
 
 These values are conservative placeholders for laptop/mock development. Real robot integration must revisit them with hardware-specific data.
-

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from typing import Callable
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,25 +14,27 @@ from .runtime import Runtime
 from .websocket import router as websocket_router
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    settings = Settings()
-    app.state.settings = settings
-    app.state.runtime = await Runtime.create(settings)
-    yield
-    await app.state.runtime.adapter.disconnect()
+def create_lifespan(settings: Settings) -> Callable:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        app.state.settings = settings
+        app.state.runtime = await Runtime.create(settings)
+        yield
+        await app.state.runtime.adapter.disconnect()
+
+    return lifespan
 
 
-def create_app() -> FastAPI:
+def create_app(settings: Settings | None = None) -> FastAPI:
+    resolved_settings = settings or Settings()
     app = FastAPI(
         title="G1 Bobby Teleop Spine",
         version="0.1.0",
-        lifespan=lifespan,
+        lifespan=create_lifespan(resolved_settings),
     )
-    settings = Settings()
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_allow_origins,
+        allow_origins=resolved_settings.cors_allow_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -48,6 +51,10 @@ def create_app() -> FastAPI:
         return {
             "adapter": runtime.adapter_name,
             "safety": asdict(runtime.safety.limits),
+            "command_gate": asdict(app.state.settings.command_gate_limits()),
+            "accepted_commands": runtime.accepted_commands,
+            "rejected_commands": runtime.rejected_commands,
+            "active_operator_connected": runtime.active_operator_connected,
         }
 
     @app.get("/state")

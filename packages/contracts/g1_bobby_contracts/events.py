@@ -18,7 +18,11 @@ class ServerEventType(StrEnum):
 class ErrorCode(StrEnum):
     AUTH_FAILED = "auth_failed"
     INVALID_MESSAGE = "invalid_message"
+    RATE_LIMITED = "rate_limited"
+    REPLAYED_COMMAND = "replayed_command"
     SAFETY_REJECTED = "safety_rejected"
+    SESSION_BUSY = "session_busy"
+    STALE_COMMAND = "stale_command"
     EXECUTION_FAILED = "execution_failed"
 
 
@@ -57,4 +61,3 @@ class TelemetryEvent(BaseModel):
 
 
 ServerEvent = Union[AckEvent, RejectEvent, StateEvent, TelemetryEvent]
-
