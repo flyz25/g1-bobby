@@ -42,6 +42,21 @@ def default_audit_url(url: str) -> str:
     )
 
 
+def attach_after_id(url: str, after_id: int) -> str:
+    parsed = urlsplit(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query["after_id"] = str(max(after_id, 0))
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(query),
+            parsed.fragment,
+        )
+    )
+
+
 def demo_messages(client_id: str = "operator-cli", now: float | None = None) -> list[dict[str, Any]]:
     base_time = time() if now is None else now
     return [

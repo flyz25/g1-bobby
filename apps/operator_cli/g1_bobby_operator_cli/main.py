@@ -12,6 +12,7 @@ import websockets
 from .messages import (
     DEFAULT_OPERATOR_TOKEN,
     DEFAULT_WS_URL,
+    attach_after_id,
     attach_token,
     default_audit_url,
     demo_messages,
@@ -44,6 +45,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--audit-stream",
         action="store_true",
         help="Connect to the read-only command-plan audit stream",
+    )
+    parser.add_argument(
+        "--after-id",
+        type=int,
+        default=0,
+        help="Replay only audit events with event_id greater than this value",
+    )
+    parser.add_argument(
+        "--resume-file",
+        type=Path,
+        help="Persist the highest seen audit event_id and reuse it on reconnect",
     )
     parser.add_argument(
         "--watch",
@@ -359,23 +371,92 @@ def effective_listen_s(args: argparse.Namespace) -> float:
 
 
 def resolve_ws_url(args: argparse.Namespace) -> str:
+    base_url = args.audit_url or default_audit_url(args.url) if args.audit_stream else args.url
     if args.audit_stream:
-        return args.audit_url or default_audit_url(args.url)
-    return args.url
+        after_id = current_after_id(args)
+        if after_id > 0:
+            return attach_after_id(base_url, after_id)
+    return base_url
+
+
+def load_resume_after_id(path: Path | None) -> int:
+    if path is None or not path.exists():
+        return 0
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(payload, dict):
+        return 0
+    value = payload.get("after_id", 0)
+    if not isinstance(value, int):
+        return 0
+    return max(value, 0)
+
+
+def persist_resume_after_id(path: Path | None, after_id: int) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"after_id": max(after_id, 0)}) + "\n", encoding="utf-8")
+
+
+def current_after_id(args: argparse.Namespace) -> int:
+    return max(getattr(args, "_resume_after_id", 0), max(args.after_id, 0))
+
+
+def extract_event_id(raw_text: str) -> int | None:
+    try:
+        event = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(event, dict):
+        return None
+    event_type = event.get("type")
+    if event_type == "command_plan":
+        record = event.get("unitree_command_plan")
+    elif event_type == "execution_plan":
+        record = event.get("unitree_execution_plan")
+    elif event_type == "execution_result":
+        record = event.get("unitree_execution_result")
+    elif event_type == "rejected_command":
+        record = event.get("rejected_command")
+    else:
+        return None
+    if not isinstance(record, dict):
+        return None
+    event_id = record.get("event_id")
+    if not isinstance(event_id, int | float):
+        return None
+    return int(event_id)
+
+
+def update_resume_checkpoint(args: argparse.Namespace, raw_text: str) -> None:
+    event_id = extract_event_id(raw_text)
+    if event_id is None:
+        return
+    if event_id > getattr(args, "_resume_after_id", 0):
+        args._resume_after_id = event_id
+        persist_resume_after_id(args.resume_file, event_id)
 
 
 async def run(args: argparse.Namespace) -> int:
-    url = attach_token(resolve_ws_url(args), args.token)
+    args._resume_after_id = load_resume_after_id(args.resume_file)
     outbound_messages = build_outbound_messages(args)
     replay_on_retry = should_replay_messages(args)
 
     while True:
         try:
+            url = attach_token(resolve_ws_url(args), args.token)
             async with websockets.connect(url, open_timeout=args.timeout_s) as websocket:
-                print_event(await receive_event(websocket, args.timeout_s), raw=args.raw)
+                first_event = await receive_event(websocket, args.timeout_s)
+                update_resume_checkpoint(args, first_event)
+                print_event(first_event, raw=args.raw)
                 for message in outbound_messages:
                     await websocket.send(json.dumps(message, separators=(",", ":")))
-                    print_event(await receive_event(websocket, args.timeout_s), raw=args.raw)
+                    event = await receive_event(websocket, args.timeout_s)
+                    update_resume_checkpoint(args, event)
+                    print_event(event, raw=args.raw)
                     if args.delay_s > 0:
                         await asyncio.sleep(args.delay_s)
 
@@ -387,10 +468,9 @@ async def run(args: argparse.Namespace) -> int:
                         if timeout_s <= 0:
                             break
                         try:
-                            print_event(
-                                await receive_event(websocket, min(timeout_s, args.timeout_s)),
-                                raw=args.raw,
-                            )
+                            event = await receive_event(websocket, min(timeout_s, args.timeout_s))
+                            update_resume_checkpoint(args, event)
+                            print_event(event, raw=args.raw)
                         except TimeoutError:
                             break
             return 0

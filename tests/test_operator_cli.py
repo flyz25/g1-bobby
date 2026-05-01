@@ -7,12 +7,17 @@ from g1_bobby_operator_cli.main import (
     build_outbound_messages,
     can_retry,
     effective_listen_s,
+    extract_event_id,
     format_event,
+    load_resume_after_id,
+    persist_resume_after_id,
+    current_after_id,
     resolve_ws_url,
     should_replay_messages,
     should_retry,
 )
 from g1_bobby_operator_cli.messages import (
+    attach_after_id,
     attach_token,
     default_audit_url,
     demo_messages,
@@ -40,6 +45,13 @@ def test_default_audit_url_appends_audit_suffix() -> None:
     assert (
         default_audit_url("ws://localhost:8010/ws/operator?token=old")
         == "ws://localhost:8010/ws/operator/audit?token=old"
+    )
+
+
+def test_attach_after_id_adds_query_value() -> None:
+    assert (
+        attach_after_id("ws://localhost:8010/ws/operator/audit?token=old", 7)
+        == "ws://localhost:8010/ws/operator/audit?token=old&after_id=7"
     )
 
 
@@ -189,6 +201,24 @@ def test_format_event_can_preserve_raw_json() -> None:
     assert format_event(raw, raw=True) == raw
 
 
+def test_extract_event_id_reads_audit_event_records() -> None:
+    assert extract_event_id(
+        '{"type":"command_plan","unitree_command_plan":{"event_id":11,"recorded_at":1.0,"source":"live","stale":false,"plan":{"seq":1,"type":"heartbeat","transport":"dry_run","action":"bridge.keepalive","unitree_target":"session","payload":{}}}}'
+    ) == 11
+    assert extract_event_id(
+        '{"type":"execution_result","unitree_execution_result":{"event_id":14,"recorded_at":1.0,"source":"live","stale":false,"execution_result":{"transport":"sdk_plan_stub","command_type":"set_mode","status":"stub_emitted","target":"t","detail":"d"}}}'
+    ) == 14
+    assert extract_event_id('{"type":"ack","seq":1}') is None
+
+
+def test_resume_checkpoint_round_trip(tmp_path: Path) -> None:
+    resume_file = tmp_path / "audit-resume.json"
+
+    assert load_resume_after_id(resume_file) == 0
+    persist_resume_after_id(resume_file, 9)
+    assert load_resume_after_id(resume_file) == 9
+
+
 def test_build_outbound_messages_uses_telemetry_only_mode() -> None:
     args = argparse.Namespace(
         telemetry_only=True,
@@ -254,7 +284,25 @@ def test_resolve_ws_url_uses_audit_stream_url() -> None:
         url="ws://localhost:8010/ws/operator",
         audit_url=None,
         audit_stream=True,
+        after_id=0,
+        _resume_after_id=0,
     )
     assert resolve_ws_url(args) == "ws://localhost:8010/ws/operator/audit"
     args.audit_url = "ws://localhost:8010/ws/custom-audit"
     assert resolve_ws_url(args) == "ws://localhost:8010/ws/custom-audit"
+
+
+def test_resolve_ws_url_appends_after_id_for_audit_stream() -> None:
+    args = argparse.Namespace(
+        url="ws://localhost:8010/ws/operator",
+        audit_url=None,
+        audit_stream=True,
+        after_id=4,
+        _resume_after_id=9,
+    )
+    assert resolve_ws_url(args) == "ws://localhost:8010/ws/operator/audit?after_id=9"
+
+
+def test_current_after_id_prefers_resume_checkpoint() -> None:
+    args = argparse.Namespace(after_id=4, _resume_after_id=9)
+    assert current_after_id(args) == 9
