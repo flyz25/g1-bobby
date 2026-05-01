@@ -119,13 +119,13 @@ def test_format_event_summarizes_telemetry() -> None:
 def test_format_event_summarizes_ack_and_reject() -> None:
     assert format_event(
         '{"type":"ack","seq":7,"command_type":"move_velocity","message":"accepted",'
-        '"unitree_command_plan":{"recorded_at":123.0,"source":"restored","stale":true,'
+        '"unitree_command_plan":{"event_id":11,"recorded_at":123.0,"source":"restored","stale":true,'
         '"plan":{"seq":7,"type":"move_velocity","transport":"dry_run",'
         '"action":"motion.velocity","unitree_target":"base_velocity",'
         '"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}}}'
     ) == (
         "ack seq=7 command=move_velocity message=accepted "
-        "[action=motion.velocity target=base_velocity source=restored stale=true]"
+        "[id=11 action=motion.velocity target=base_velocity source=restored stale=true]"
     )
     assert format_event('{"type":"reject","seq":8,"code":"safety_rejected","reason":"operator heartbeat is stale"}') == (
         "reject seq=8 code=safety_rejected reason=operator heartbeat is stale"
@@ -134,20 +134,20 @@ def test_format_event_summarizes_ack_and_reject() -> None:
 
 def test_format_event_summarizes_command_plan_event() -> None:
     assert format_event(
-        '{"type":"command_plan","unitree_command_plan":{"recorded_at":123.0,"source":"restored","stale":true,'
+        '{"type":"command_plan","unitree_command_plan":{"event_id":11,"recorded_at":123.0,"source":"restored","stale":true,'
         '"plan":{"seq":7,"type":"move_velocity","transport":"dry_run",'
         '"action":"motion.velocity","unitree_target":"base_velocity",'
         '"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}}}'
-    ) == "command-plan seq=7 action=motion.velocity target=base_velocity source=restored stale=true"
+    ) == "command-plan id=11 seq=7 action=motion.velocity target=base_velocity source=restored stale=true"
 
 
 def test_format_event_summarizes_rejected_command_event() -> None:
     assert format_event(
-        '{"type":"rejected_command","rejected_command":{"recorded_at":123.0,"source":"restored","stale":true,'
+        '{"type":"rejected_command","rejected_command":{"event_id":12,"recorded_at":123.0,"source":"restored","stale":true,'
         '"command_type":"move_velocity","rejection":{"type":"reject","seq":9,"code":"safety_rejected",'
         '"reason":"operator heartbeat is stale"}}}'
     ) == (
-        "rejected-command seq=9 code=safety_rejected command=move_velocity "
+        "rejected-command id=12 seq=9 code=safety_rejected command=move_velocity "
         "source=restored stale=true reason=operator heartbeat is stale"
     )
 

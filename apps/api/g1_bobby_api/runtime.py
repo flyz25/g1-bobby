@@ -48,6 +48,7 @@ class Runtime:
     unitree_state_ttl_s: float = 2.0
     unitree_command_plan_ttl_s: float = 10.0
     rejected_command_ttl_s: float = 10.0
+    _next_audit_event_id: int = field(default=1, init=False, repr=False)
     _unitree_state: UnitreeDdsSnapshot | None = field(default=None, init=False, repr=False)
     _last_unitree_command_plan: UnitreeCommandPlanRecord | None = field(default=None, init=False, repr=False)
     _unitree_command_plan_history: list[UnitreeCommandPlanRecord] = field(default_factory=list, init=False, repr=False)
@@ -145,6 +146,11 @@ class Runtime:
         decorated.stale = (time() - snapshot.timestamp_s) > self.unitree_state_ttl_s
         return decorated
 
+    def _allocate_audit_event_id(self) -> int:
+        event_id = self._next_audit_event_id
+        self._next_audit_event_id += 1
+        return event_id
+
     def _persist_unitree_state(self, snapshot: UnitreeDdsSnapshot) -> None:
         self.unitree_state_cache_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.unitree_state_cache_path.with_suffix(f"{self.unitree_state_cache_path.suffix}.tmp")
@@ -157,6 +163,7 @@ class Runtime:
         payload = "\n".join(
             json.dumps(
                 {
+                    "event_id": record.event_id,
                     "recorded_at": record.recorded_at,
                     "plan": record.plan.model_dump(mode="json"),
                 }
@@ -172,6 +179,7 @@ class Runtime:
         payload = "\n".join(
             json.dumps(
                 {
+                    "event_id": record.event_id,
                     "recorded_at": record.recorded_at,
                     "rejection": record.rejection.model_dump(mode="json"),
                     "command_type": record.command_type,
@@ -231,6 +239,7 @@ class Runtime:
                 payload = json.loads(raw_line)
                 entries.append(
                     UnitreeCommandPlanRecord(
+                        event_id=int(payload.get("event_id") or self._allocate_audit_event_id()),
                         recorded_at=float(payload["recorded_at"]),
                         source="restored",
                         stale=False,
@@ -250,6 +259,7 @@ class Runtime:
             self._unitree_command_plan_restored = True
             self.unitree_command_plans = len(self._unitree_command_plan_history)
             self.unitree_command_plan_recorded_at = retained[-1].recorded_at
+            self._next_audit_event_id = max(self._next_audit_event_id, retained[-1].event_id + 1)
         return True
 
     async def load_persisted_rejected_commands(self) -> bool:
@@ -264,6 +274,7 @@ class Runtime:
                 payload = json.loads(raw_line)
                 entries.append(
                     RejectedCommandRecord(
+                        event_id=int(payload.get("event_id") or self._allocate_audit_event_id()),
                         recorded_at=float(payload["recorded_at"]),
                         source="restored",
                         stale=False,
@@ -284,6 +295,7 @@ class Runtime:
             self._rejected_command_restored = True
             self.rejected_command_records = len(retained)
             self.rejected_command_recorded_at = retained[-1].recorded_at
+            self._next_audit_event_id = max(self._next_audit_event_id, retained[-1].event_id + 1)
         return True
 
     async def get_unitree_state(self) -> UnitreeDdsSnapshot | None:
@@ -297,6 +309,7 @@ class Runtime:
     async def record_unitree_command_plan(self, command: CommandEnvelope) -> UnitreeCommandPlanRecord:
         plan = translate_unitree_command(command)
         record = UnitreeCommandPlanRecord(
+            event_id=self._allocate_audit_event_id(),
             recorded_at=time(),
             source="live",
             stale=False,
@@ -347,6 +360,7 @@ class Runtime:
     ) -> RejectedCommandRecord:
         self.record_rejected_command()
         record = RejectedCommandRecord(
+            event_id=self._allocate_audit_event_id(),
             recorded_at=time(),
             source="live",
             stale=False,

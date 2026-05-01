@@ -295,6 +295,7 @@ def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
 
         plan = client.get("/unitree/command-plan")
         assert plan.status_code == 200
+        assert plan.json()["event_id"] == 3
         assert plan.json()["source"] == "live"
         assert plan.json()["stale"] is False
         assert plan.json()["plan"]["action"] == "motion.velocity"
@@ -310,6 +311,7 @@ def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
 
         history = client.get("/unitree/command-plans")
         assert history.status_code == 200
+        assert [record["event_id"] for record in history.json()] == [1, 2, 3]
         assert [record["plan"]["action"] for record in history.json()] == [
             "bridge.keepalive",
             "bridge.set_mode",
@@ -369,6 +371,7 @@ def test_unitree_command_plan_history_is_trimmed(tmp_path: Path) -> None:
 
         history = client.get("/unitree/command-plans")
         assert history.status_code == 200
+        assert [record["event_id"] for record in history.json()] == [2, 3]
         assert [record["plan"]["seq"] for record in history.json()] == [2, 3]
         assert all(record["source"] == "live" for record in history.json())
 
@@ -413,12 +416,14 @@ def test_unitree_command_plan_history_is_restored_after_app_restart(tmp_path: Pa
     with TestClient(create_app(settings)) as restarted_client:
         plan = restarted_client.get("/unitree/command-plan")
         assert plan.status_code == 200
+        assert plan.json()["event_id"] == 3
         assert plan.json()["plan"]["seq"] == 3
         assert plan.json()["source"] == "restored"
         assert plan.json()["stale"] is False
 
         history = restarted_client.get("/unitree/command-plans")
         assert history.status_code == 200
+        assert [item["event_id"] for item in history.json()] == [2, 3]
         assert [item["plan"]["seq"] for item in history.json()] == [2, 3]
         assert all(item["source"] == "restored" for item in history.json())
 
@@ -461,6 +466,7 @@ def test_audit_websocket_replays_history_and_streams_live_updates(tmp_path: Path
                 second = audit.receive_json()
                 assert first["type"] == "command_plan"
                 assert second["type"] == "command_plan"
+                assert [first["unitree_command_plan"]["event_id"], second["unitree_command_plan"]["event_id"]] == [1, 2]
                 assert [first["unitree_command_plan"]["plan"]["seq"], second["unitree_command_plan"]["plan"]["seq"]] == [1, 2]
                 assert all(
                     item["unitree_command_plan"]["source"] == "live"
@@ -483,6 +489,7 @@ def test_audit_websocket_replays_history_and_streams_live_updates(tmp_path: Path
                 operator.receive_json()
                 live = audit.receive_json()
                 assert live["type"] == "command_plan"
+                assert live["unitree_command_plan"]["event_id"] == 3
                 assert live["unitree_command_plan"]["plan"]["seq"] == 3
                 assert live["unitree_command_plan"]["plan"]["action"] == "motion.velocity"
                 assert live["unitree_command_plan"]["source"] == "live"
@@ -517,12 +524,14 @@ def test_rejected_command_endpoints_and_audit_stream(tmp_path: Path) -> None:
 
             latest = client.get("/operator/rejection")
             assert latest.status_code == 200
+            assert latest.json()["event_id"] == 2
             assert latest.json()["rejection"]["code"] == "replayed_command"
             assert latest.json()["command_type"] == "set_mode"
             assert latest.json()["source"] == "live"
 
             history = client.get("/operator/rejections")
             assert history.status_code == 200
+            assert history.json()[0]["event_id"] == 2
             assert history.json()[0]["rejection"]["seq"] == 1
 
             runtime = client.get("/runtime")
@@ -535,6 +544,7 @@ def test_rejected_command_endpoints_and_audit_stream(tmp_path: Path) -> None:
                 second = audit.receive_json()
                 assert {first["type"], second["type"]} == {"command_plan", "rejected_command"}
                 rejected_event = first if first["type"] == "rejected_command" else second
+                assert rejected_event["rejected_command"]["event_id"] == 2
                 assert rejected_event["rejected_command"]["rejection"]["code"] == "replayed_command"
                 assert rejected_event["rejected_command"]["command_type"] == "set_mode"
 
@@ -548,6 +558,7 @@ def test_rejected_command_endpoints_and_audit_stream(tmp_path: Path) -> None:
                 )
                 live = audit.receive_json()
                 assert live["type"] == "rejected_command"
+                assert live["rejected_command"]["event_id"] == 3
                 assert live["rejected_command"]["rejection"]["code"] == "replayed_command"
 
 
@@ -578,13 +589,45 @@ def test_rejected_command_history_is_restored_after_restart(tmp_path: Path) -> N
     with TestClient(create_app(settings)) as restarted_client:
         latest = restarted_client.get("/operator/rejection")
         assert latest.status_code == 200
+        assert latest.json()["event_id"] == 2
         assert latest.json()["source"] == "restored"
         assert latest.json()["stale"] is False
         history = restarted_client.get("/operator/rejections")
         assert history.status_code == 200
+        assert history.json()[0]["event_id"] == 2
         assert history.json()[0]["source"] == "restored"
         runtime = restarted_client.get("/runtime")
         assert runtime.json()["rejected_command"]["source"] == "restored"
+
+
+def test_audit_websocket_after_id_replays_only_newer_events(tmp_path: Path) -> None:
+    settings = build_settings(tmp_path, unitree_command_plan_history_size=3, rejected_command_history_size=3)
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/operator?token=dev-operator-token") as operator:
+            assert operator.receive_json()["type"] == "state"
+            operator.send_json(
+                {
+                    "type": "heartbeat",
+                    "seq": 1,
+                    "timestamp": time(),
+                    "payload": {"client_id": "quest-dev"},
+                }
+            )
+            operator.receive_json()
+            operator.send_json(
+                {
+                    "type": "set_mode",
+                    "seq": 1,
+                    "timestamp": time(),
+                    "payload": {"mode": "manual"},
+                }
+            )
+            operator.receive_json()
+
+        with client.websocket_connect("/ws/operator/audit?token=dev-operator-token&after_id=1") as audit:
+            event = audit.receive_json()
+            assert event["type"] == "rejected_command"
+            assert event["rejected_command"]["event_id"] == 2
 
 
 def test_restored_unitree_command_plan_can_be_marked_stale(tmp_path: Path) -> None:

@@ -52,6 +52,7 @@ class RejectEvent(BaseModel):
 class RejectedCommandRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    event_id: int = Field(ge=1)
     recorded_at: float
     source: str
     stale: bool = False

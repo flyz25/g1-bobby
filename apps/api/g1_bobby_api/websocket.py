@@ -151,8 +151,21 @@ async def operator_socket(websocket: WebSocket) -> None:
 @router.websocket("/ws/operator/audit")
 async def operator_audit_socket(websocket: WebSocket) -> None:
     token = websocket.query_params.get("token")
+    after_id_raw = websocket.query_params.get("after_id")
     settings = websocket.app.state.settings
     runtime = websocket.app.state.runtime
+    after_id = 0
+
+    if after_id_raw is not None:
+        try:
+            after_id = max(int(after_id_raw), 0)
+        except ValueError:
+            await websocket.accept()
+            reject_event = RejectEvent(code=ErrorCode.INVALID_MESSAGE, reason="after_id must be an integer")
+            await runtime.record_rejected_command_event(reject_event)
+            await send_event(websocket, reject_event)
+            await websocket.close(code=1003)
+            return
 
     if token != settings.operator_token:
         await websocket.accept()
@@ -168,10 +181,18 @@ async def operator_audit_socket(websocket: WebSocket) -> None:
     try:
         replay_events: list[tuple[float, object]] = []
         for record in await runtime.get_unitree_command_plan_history():
-            replay_events.append((record.recorded_at, CommandPlanEvent(unitree_command_plan=record)))
+            if record.event_id > after_id:
+                replay_events.append((record.recorded_at, CommandPlanEvent(unitree_command_plan=record)))
         for record in await runtime.get_rejected_command_history():
-            replay_events.append((record.recorded_at, RejectedCommandEvent(rejected_command=record)))
-        replay_events.sort(key=lambda item: item[0])
+            if record.event_id > after_id:
+                replay_events.append((record.recorded_at, RejectedCommandEvent(rejected_command=record)))
+        replay_events.sort(
+            key=lambda item: (
+                item[1].unitree_command_plan.event_id
+                if isinstance(item[1], CommandPlanEvent)
+                else item[1].rejected_command.event_id
+            )
+        )
 
         for _, event in replay_events:
             await send_event(websocket, event)

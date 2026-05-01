@@ -98,6 +98,9 @@ def _format_unitree_command_plan_suffix(event: dict[str, Any]) -> str:
     if not isinstance(plan, dict):
         return ""
     details: list[str] = []
+    event_id = record.get("event_id")
+    if isinstance(event_id, int | float):
+        details.append(f"id={int(event_id)}")
     action = plan.get("action")
     if isinstance(action, str):
         details.append(f"action={action}")
@@ -117,7 +120,11 @@ def _format_unitree_command_plan_record(record: dict[str, Any]) -> str:
     plan = record.get("plan")
     if not isinstance(plan, dict):
         return "command-plan"
-    details = [f"seq={plan.get('seq')}", f"action={plan.get('action')}"]
+    details: list[str] = []
+    event_id = record.get("event_id")
+    if isinstance(event_id, int | float):
+        details.append(f"id={int(event_id)}")
+    details.extend([f"seq={plan.get('seq')}", f"action={plan.get('action')}"])
     target = plan.get("unitree_target")
     if isinstance(target, str):
         details.append(f"target={target}")
@@ -134,7 +141,11 @@ def _format_rejected_command_record(record: dict[str, Any]) -> str:
     rejection = record.get("rejection")
     if not isinstance(rejection, dict):
         return "rejected-command"
-    details = [f"seq={rejection.get('seq')}", f"code={rejection.get('code')}"]
+    details: list[str] = []
+    event_id = record.get("event_id")
+    if isinstance(event_id, int | float):
+        details.append(f"id={int(event_id)}")
+    details.extend([f"seq={rejection.get('seq')}", f"code={rejection.get('code')}"])
     command_type = record.get("command_type")
     if isinstance(command_type, str):
         details.append(f"command={command_type}")

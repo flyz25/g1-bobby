@@ -248,6 +248,7 @@ async def test_runtime_records_unitree_command_plan(tmp_path: Path) -> None:
 
     try:
         plan = await runtime.record_unitree_command_plan(command)
+        assert plan.event_id == 1
         assert plan.plan.action == "motion.velocity"
         assert plan.source == "live"
         assert plan.stale is False
@@ -286,6 +287,7 @@ async def test_runtime_broadcasts_unitree_command_plan_to_subscribers(tmp_path: 
             )
         )
         broadcast = await subscription.get()
+        assert broadcast.event_id == 1
         assert broadcast.plan.seq == 3
         assert broadcast.plan.action == "motion.velocity"
         assert broadcast.source == "live"
@@ -306,7 +308,9 @@ async def test_runtime_records_and_broadcasts_rejected_command(tmp_path: Path) -
             RejectEvent(seq=7, code=ErrorCode.SAFETY_REJECTED, reason="operator heartbeat is stale"),
             command_type="move_velocity",
         )
+        assert record.event_id == 1
         broadcast = await subscription.get()
+        assert broadcast.event_id == 1
         assert broadcast.rejection.seq == 7
         assert broadcast.rejection.code == ErrorCode.SAFETY_REJECTED
         assert broadcast.command_type == "move_velocity"
@@ -385,6 +389,7 @@ async def test_runtime_persists_and_reloads_unitree_command_plan_history(tmp_pat
     try:
         history = await reloaded.get_unitree_command_plan_history()
         assert [record.plan.seq for record in history] == [2, 3]
+        assert [record.event_id for record in history] == [2, 3]
         assert all(record.source == "restored" for record in history)
         last_plan = await reloaded.get_last_unitree_command_plan()
         assert last_plan is not None
@@ -471,6 +476,7 @@ async def test_runtime_persists_and_reloads_rejected_command_history(tmp_path: P
     try:
         history = await reloaded.get_rejected_command_history()
         assert [record.rejection.seq for record in history] == [2, 3]
+        assert [record.event_id for record in history] == [2, 3]
         assert all(record.source == "restored" for record in history)
         last_record = await reloaded.get_last_rejected_command()
         assert last_record is not None
