@@ -26,7 +26,7 @@ async def test_ros2_plan_stub_publisher_emits_ros2_publish_plan() -> None:
         )
         emitted = publisher.emitted_plans()
         assert emitted[0].transport == "ros2_plan_stub"
-        assert emitted[0].plan["topic"] == "/lowcmd"
+        assert emitted[0].target == "/lowcmd"
     finally:
         await publisher.disconnect()
 
@@ -62,4 +62,4 @@ def test_plan_stub_cli_prints_emitted_plans(capsys) -> None:
     assert exit_code == 0
     payload = json.loads(captured.out)
     assert payload["emitted_plans"][0]["transport"] == "sdk_plan_stub"
-    assert payload["emitted_plans"][0]["plan"]["payload"]["operation"] == "switch_mode"
+    assert payload["emitted_plans"][0]["payload"]["operation"] == "switch_mode"

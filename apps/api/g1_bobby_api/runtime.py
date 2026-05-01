@@ -15,6 +15,8 @@ from g1_bobby_contracts import (
     RobotState,
     UnitreeCommandPlan,
     UnitreeCommandPlanRecord,
+    UnitreeExecutionPlan,
+    UnitreeExecutionPlanRecord,
     UnitreeDdsSnapshot,
     translate_unitree_command,
 )
@@ -36,17 +38,24 @@ class Runtime:
     unitree_state_received_at: float | None = None
     unitree_command_plans: int = 0
     unitree_command_plan_recorded_at: float | None = None
+    unitree_execution_plans: int = 0
+    unitree_execution_plan_recorded_at: float | None = None
     rejected_command_records: int = 0
     rejected_command_recorded_at: float | None = None
     unitree_command_plan_history_size: int = 10
+    unitree_execution_plan_history_size: int = 10
     rejected_command_history_size: int = 20
     unitree_state_cache_path: Path = field(default_factory=lambda: Path(".runtime/unitree_state.json"))
     unitree_command_plan_cache_path: Path = field(
         default_factory=lambda: Path(".runtime/unitree_command_plans.jsonl")
     )
+    unitree_execution_plan_cache_path: Path = field(
+        default_factory=lambda: Path(".runtime/unitree_execution_plans.jsonl")
+    )
     rejected_command_cache_path: Path = field(default_factory=lambda: Path(".runtime/rejected_commands.jsonl"))
     unitree_state_ttl_s: float = 2.0
     unitree_command_plan_ttl_s: float = 10.0
+    unitree_execution_plan_ttl_s: float = 10.0
     rejected_command_ttl_s: float = 10.0
     _next_audit_event_id: int = field(default=1, init=False, repr=False)
     _unitree_state: UnitreeDdsSnapshot | None = field(default=None, init=False, repr=False)
@@ -54,6 +63,14 @@ class Runtime:
     _unitree_command_plan_history: list[UnitreeCommandPlanRecord] = field(default_factory=list, init=False, repr=False)
     _unitree_command_plan_restored: bool = field(default=False, init=False, repr=False)
     _unitree_command_plan_subscribers: set[asyncio.Queue[UnitreeCommandPlanRecord]] = field(
+        default_factory=set,
+        init=False,
+        repr=False,
+    )
+    _last_unitree_execution_plan: UnitreeExecutionPlanRecord | None = field(default=None, init=False, repr=False)
+    _unitree_execution_plan_history: list[UnitreeExecutionPlanRecord] = field(default_factory=list, init=False, repr=False)
+    _unitree_execution_plan_restored: bool = field(default=False, init=False, repr=False)
+    _unitree_execution_plan_subscribers: set[asyncio.Queue[UnitreeExecutionPlanRecord]] = field(
         default_factory=set,
         init=False,
         repr=False,
@@ -70,6 +87,7 @@ class Runtime:
     _operator_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _unitree_state_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _unitree_command_plan_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    _unitree_execution_plan_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _rejected_command_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
     @classmethod
@@ -86,15 +104,19 @@ class Runtime:
             adapter_name=str(resolved_settings.robot_adapter),
             unitree_state_cache_path=resolved_settings.unitree_state_cache_path,
             unitree_command_plan_cache_path=resolved_settings.unitree_command_plan_cache_path,
+            unitree_execution_plan_cache_path=resolved_settings.unitree_execution_plan_cache_path,
             rejected_command_cache_path=resolved_settings.rejected_command_cache_path,
             unitree_state_ttl_s=resolved_settings.unitree_state_ttl_s,
             unitree_command_plan_ttl_s=resolved_settings.unitree_command_plan_ttl_s,
+            unitree_execution_plan_ttl_s=resolved_settings.unitree_execution_plan_ttl_s,
             rejected_command_ttl_s=resolved_settings.rejected_command_ttl_s,
             unitree_command_plan_history_size=resolved_settings.unitree_command_plan_history_size,
+            unitree_execution_plan_history_size=resolved_settings.unitree_execution_plan_history_size,
             rejected_command_history_size=resolved_settings.rejected_command_history_size,
         )
         await runtime.load_persisted_unitree_state()
         await runtime.load_persisted_unitree_command_plans()
+        await runtime.load_persisted_unitree_execution_plans()
         await runtime.load_persisted_rejected_commands()
         return runtime
 
@@ -190,6 +212,24 @@ class Runtime:
         tmp_path.write_text(f"{payload}\n" if payload else "", encoding="utf-8")
         tmp_path.replace(self.rejected_command_cache_path)
 
+    def _persist_unitree_execution_plan_history(self) -> None:
+        self.unitree_execution_plan_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.unitree_execution_plan_cache_path.with_suffix(
+            f"{self.unitree_execution_plan_cache_path.suffix}.tmp"
+        )
+        payload = "\n".join(
+            json.dumps(
+                {
+                    "event_id": record.event_id,
+                    "recorded_at": record.recorded_at,
+                    "execution_plan": record.execution_plan.model_dump(mode="json"),
+                }
+            )
+            for record in self._unitree_execution_plan_history
+        )
+        tmp_path.write_text(f"{payload}\n" if payload else "", encoding="utf-8")
+        tmp_path.replace(self.unitree_execution_plan_cache_path)
+
     def _decorate_unitree_command_plan_record(self, record: UnitreeCommandPlanRecord) -> UnitreeCommandPlanRecord:
         decorated = record.model_copy(deep=True)
         decorated.source = "restored" if self._unitree_command_plan_restored else "live"
@@ -200,6 +240,15 @@ class Runtime:
         decorated = record.model_copy(deep=True)
         decorated.source = "restored" if self._rejected_command_restored else "live"
         decorated.stale = (time() - decorated.recorded_at) > self.rejected_command_ttl_s
+        return decorated
+
+    def _decorate_unitree_execution_plan_record(
+        self,
+        record: UnitreeExecutionPlanRecord,
+    ) -> UnitreeExecutionPlanRecord:
+        decorated = record.model_copy(deep=True)
+        decorated.source = "restored" if self._unitree_execution_plan_restored else "live"
+        decorated.stale = (time() - decorated.recorded_at) > self.unitree_execution_plan_ttl_s
         return decorated
 
     async def record_unitree_state(self, snapshot: UnitreeDdsSnapshot) -> None:
@@ -259,6 +308,41 @@ class Runtime:
             self._unitree_command_plan_restored = True
             self.unitree_command_plans = len(self._unitree_command_plan_history)
             self.unitree_command_plan_recorded_at = retained[-1].recorded_at
+            self._next_audit_event_id = max(self._next_audit_event_id, retained[-1].event_id + 1)
+        return True
+
+    async def load_persisted_unitree_execution_plans(self) -> bool:
+        if not self.unitree_execution_plan_cache_path.exists():
+            return False
+
+        entries: list[UnitreeExecutionPlanRecord] = []
+        try:
+            for raw_line in self.unitree_execution_plan_cache_path.read_text(encoding="utf-8").splitlines():
+                if not raw_line.strip():
+                    continue
+                payload = json.loads(raw_line)
+                entries.append(
+                    UnitreeExecutionPlanRecord(
+                        event_id=int(payload.get("event_id") or self._allocate_audit_event_id()),
+                        recorded_at=float(payload["recorded_at"]),
+                        source="restored",
+                        stale=False,
+                        execution_plan=UnitreeExecutionPlan.model_validate(payload["execution_plan"]),
+                    )
+                )
+        except (OSError, ValidationError, json.JSONDecodeError, KeyError, TypeError):
+            return False
+
+        if not entries:
+            return False
+
+        retained = entries[-self.unitree_execution_plan_history_size :]
+        async with self._unitree_execution_plan_lock:
+            self._unitree_execution_plan_history = retained
+            self._last_unitree_execution_plan = retained[-1]
+            self._unitree_execution_plan_restored = True
+            self.unitree_execution_plans = len(retained)
+            self.unitree_execution_plan_recorded_at = retained[-1].recorded_at
             self._next_audit_event_id = max(self._next_audit_event_id, retained[-1].event_id + 1)
         return True
 
@@ -343,6 +427,61 @@ class Runtime:
         async with self._unitree_command_plan_lock:
             return [self._decorate_unitree_command_plan_record(record) for record in self._unitree_command_plan_history]
 
+    async def record_unitree_execution_plan(
+        self,
+        execution_plan: UnitreeExecutionPlan,
+    ) -> UnitreeExecutionPlanRecord:
+        record = UnitreeExecutionPlanRecord(
+            event_id=self._allocate_audit_event_id(),
+            recorded_at=time(),
+            source="live",
+            stale=False,
+            execution_plan=execution_plan,
+        )
+        async with self._unitree_execution_plan_lock:
+            self._last_unitree_execution_plan = record
+            self._unitree_execution_plan_history.append(record)
+            self._unitree_execution_plan_restored = False
+            if len(self._unitree_execution_plan_history) > self.unitree_execution_plan_history_size:
+                self._unitree_execution_plan_history = self._unitree_execution_plan_history[
+                    -self.unitree_execution_plan_history_size :
+                ]
+            self.unitree_execution_plans += 1
+            self.unitree_execution_plan_recorded_at = record.recorded_at
+            self._persist_unitree_execution_plan_history()
+            decorated = self._decorate_unitree_execution_plan_record(record)
+            for subscriber in self._unitree_execution_plan_subscribers:
+                subscriber.put_nowait(decorated)
+        return decorated
+
+    async def get_last_unitree_execution_plan(self) -> UnitreeExecutionPlanRecord | None:
+        async with self._unitree_execution_plan_lock:
+            return (
+                self._decorate_unitree_execution_plan_record(self._last_unitree_execution_plan)
+                if self._last_unitree_execution_plan
+                else None
+            )
+
+    async def get_unitree_execution_plan_history(self) -> list[UnitreeExecutionPlanRecord]:
+        async with self._unitree_execution_plan_lock:
+            return [
+                self._decorate_unitree_execution_plan_record(record)
+                for record in self._unitree_execution_plan_history
+            ]
+
+    async def subscribe_unitree_execution_plans(self) -> asyncio.Queue[UnitreeExecutionPlanRecord]:
+        queue: asyncio.Queue[UnitreeExecutionPlanRecord] = asyncio.Queue()
+        async with self._unitree_execution_plan_lock:
+            self._unitree_execution_plan_subscribers.add(queue)
+        return queue
+
+    async def unsubscribe_unitree_execution_plans(
+        self,
+        queue: asyncio.Queue[UnitreeExecutionPlanRecord],
+    ) -> None:
+        async with self._unitree_execution_plan_lock:
+            self._unitree_execution_plan_subscribers.discard(queue)
+
     async def subscribe_unitree_command_plans(self) -> asyncio.Queue[UnitreeCommandPlanRecord]:
         queue: asyncio.Queue[UnitreeCommandPlanRecord] = asyncio.Queue()
         async with self._unitree_command_plan_lock:
@@ -416,6 +555,23 @@ class Runtime:
                 "available": self._last_unitree_command_plan is not None,
                 "retained": len(self._unitree_command_plan_history),
                 "history_size": self.unitree_command_plan_history_size,
+                "source": last.source if last else None,
+                "stale": last.stale if last else None,
+            }
+
+    async def unitree_execution_plan_status(self) -> dict[str, object]:
+        async with self._unitree_execution_plan_lock:
+            last = (
+                self._decorate_unitree_execution_plan_record(self._last_unitree_execution_plan)
+                if self._last_unitree_execution_plan
+                else None
+            )
+            return {
+                "plans": self.unitree_execution_plans,
+                "last_recorded_at": self.unitree_execution_plan_recorded_at,
+                "available": self._last_unitree_execution_plan is not None,
+                "retained": len(self._unitree_execution_plan_history),
+                "history_size": self.unitree_execution_plan_history_size,
                 "source": last.source if last else None,
                 "stale": last.stale if last else None,
             }

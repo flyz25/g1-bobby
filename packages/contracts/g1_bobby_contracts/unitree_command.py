@@ -28,6 +28,28 @@ class UnitreeCommandPlanRecord(BaseModel):
     plan: UnitreeCommandPlan
 
 
+class UnitreeExecutionPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    transport: str
+    command_type: str
+    binding_mode: str
+    surface: str
+    target: str
+    payload: dict[str, Any]
+    note: str
+
+
+class UnitreeExecutionPlanRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: int = Field(ge=1)
+    recorded_at: float
+    source: str
+    stale: bool = False
+    execution_plan: UnitreeExecutionPlan
+
+
 def translate_unitree_command(command: CommandEnvelope) -> UnitreeCommandPlan:
     if command.type == CommandType.HEARTBEAT:
         return UnitreeCommandPlan(

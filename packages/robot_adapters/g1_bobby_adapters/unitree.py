@@ -5,6 +5,7 @@ from importlib import import_module
 from time import time
 
 from g1_bobby_contracts.commands import CommandEnvelope
+from g1_bobby_contracts.unitree_command import UnitreeExecutionPlan
 from g1_bobby_contracts.state import ControlMode, RobotState
 
 from .unitree_transport import (
@@ -47,6 +48,7 @@ class UnitreeAdapter:
     ) -> None:
         self.config = config or UnitreeAdapterConfig()
         self._publisher = publisher or self._create_publisher(self.config.command_transport)
+        self._last_execution_plan: UnitreeExecutionPlan | None = None
         self._state = RobotState(
             connected=False,
             estop_engaged=True,
@@ -130,6 +132,10 @@ class UnitreeAdapter:
             await self._publisher.publish(command)
         except UnitreeTransportConfigurationError as exc:
             raise UnitreeAdapterConfigurationError(str(exc)) from exc
+        self._last_execution_plan = None
+        consume_execution_plan = getattr(self._publisher, "consume_last_execution_plan", None)
+        if callable(consume_execution_plan):
+            self._last_execution_plan = consume_execution_plan()
 
         if str(command.type) == "heartbeat":
             self._state.last_heartbeat_at = command.timestamp
@@ -151,3 +157,10 @@ class UnitreeAdapter:
         self._state.mode = ControlMode.IDLE
         self._state.last_state_at = time()
         return True
+
+    def consume_last_execution_plan(self) -> UnitreeExecutionPlan | None:
+        if self._last_execution_plan is None:
+            return None
+        plan = self._last_execution_plan.model_copy(deep=True)
+        self._last_execution_plan = None
+        return plan

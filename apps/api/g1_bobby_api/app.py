@@ -9,7 +9,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from g1_bobby_contracts.events import StateEvent
-from g1_bobby_contracts import RejectedCommandRecord, UnitreeCommandPlanRecord
+from g1_bobby_contracts import RejectedCommandRecord, UnitreeCommandPlanRecord, UnitreeExecutionPlanRecord
 from g1_bobby_contracts.unitree import UnitreeDdsSnapshot
 
 from .config import Settings
@@ -60,6 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "active_operator_connected": runtime.active_operator_connected,
             "unitree_state": await runtime.unitree_state_status(),
             "unitree_command_plan": await runtime.unitree_command_plan_status(),
+            "unitree_execution_plan": await runtime.unitree_execution_plan_status(),
             "rejected_command": await runtime.rejected_command_status(),
         }
 
@@ -88,6 +89,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/unitree/command-plans")
     async def unitree_command_plans() -> list[UnitreeCommandPlanRecord]:
         return await app.state.runtime.get_unitree_command_plan_history()
+
+    @app.get("/unitree/execution-plan")
+    async def unitree_execution_plan() -> UnitreeExecutionPlanRecord:
+        plan = await app.state.runtime.get_last_unitree_execution_plan()
+        if plan is None:
+            raise HTTPException(status_code=404, detail="unitree execution plan is not available")
+        return plan
+
+    @app.get("/unitree/execution-plans")
+    async def unitree_execution_plans() -> list[UnitreeExecutionPlanRecord]:
+        return await app.state.runtime.get_unitree_execution_plan_history()
 
     @app.get("/operator/rejection")
     async def rejected_command() -> RejectedCommandRecord:

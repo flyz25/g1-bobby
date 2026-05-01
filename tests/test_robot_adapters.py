@@ -139,8 +139,8 @@ async def test_unitree_ros2_plan_stub_transport_executes_publish_plan(monkeypatc
             )
         )
         emitted = publisher.emitted_plans()
-        assert emitted[0].plan["topic"] == "/lowcmd"
-        assert emitted[0].plan["payload"]["velocity"]["linear_x"] == 0.0
+        assert emitted[0].target == "/lowcmd"
+        assert emitted[0].payload["velocity"]["linear_x"] == 0.0
     finally:
         await adapter.disconnect()
 
@@ -168,8 +168,8 @@ async def test_unitree_sdk_plan_stub_transport_executes_publish_plan(monkeypatch
             )
         )
         emitted = publisher.emitted_plans()
-        assert emitted[0].plan["binding_target"] == "SportClient/basic service request"
-        assert emitted[0].plan["payload"]["operation"] == "switch_mode"
+        assert emitted[0].target == "SportClient/basic service request"
+        assert emitted[0].payload["operation"] == "switch_mode"
     finally:
         await adapter.disconnect()
 

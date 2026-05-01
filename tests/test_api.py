@@ -33,6 +33,7 @@ def build_settings(tmp_path: Path, **kwargs) -> Settings:
         _env_file=None,
         unitree_state_cache_path=tmp_path / "unitree-state.json",
         unitree_command_plan_cache_path=tmp_path / "unitree-command-plans.jsonl",
+        unitree_execution_plan_cache_path=tmp_path / "unitree-execution-plans.jsonl",
         rejected_command_cache_path=tmp_path / "rejected-commands.jsonl",
         **kwargs,
     )
@@ -51,6 +52,7 @@ def test_health_and_state_endpoints(tmp_path: Path) -> None:
         assert runtime_body["active_operator_connected"] is False
         assert runtime_body["command_gate"]["max_commands_per_second"] == 20
         assert runtime_body["unitree_state"]["status"] == "not_available"
+        assert runtime_body["unitree_execution_plan"]["available"] is False
         assert runtime_body["rejected_command"]["available"] is False
 
         state = client.get("/state")
@@ -118,7 +120,17 @@ def test_unitree_state_ingest_and_readback(tmp_path: Path) -> None:
         assert runtime.json()["unitree_command_plan"]["available"] is False
         assert runtime.json()["unitree_command_plan"]["source"] is None
         assert runtime.json()["unitree_command_plan"]["stale"] is None
+        assert runtime.json()["unitree_execution_plan"]["available"] is False
         assert runtime.json()["rejected_command"]["available"] is False
+
+
+def test_unitree_execution_plan_endpoint_missing_before_any_accept(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path))) as client:
+        response = client.get("/unitree/execution-plan")
+        assert response.status_code == 404
+        history = client.get("/unitree/execution-plans")
+        assert history.status_code == 200
+        assert history.json() == []
 
 
 def test_websocket_rejects_invalid_token(tmp_path: Path) -> None:
@@ -259,6 +271,7 @@ def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
             assert heartbeat_ack["unitree_command_plan"]["source"] == "live"
             assert heartbeat_ack["unitree_command_plan"]["stale"] is False
             assert heartbeat_ack["unitree_command_plan"]["plan"]["action"] == "bridge.keepalive"
+            assert heartbeat_ack["unitree_execution_plan"] is None
 
             websocket.send_json(
                 {
@@ -271,6 +284,7 @@ def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
             mode_ack = websocket.receive_json()
             assert mode_ack["type"] == "ack"
             assert mode_ack["unitree_command_plan"]["plan"]["action"] == "bridge.set_mode"
+            assert mode_ack["unitree_execution_plan"] is None
 
             websocket.send_json(
                 {
@@ -317,6 +331,59 @@ def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
             "bridge.set_mode",
             "motion.velocity",
         ]
+
+
+def test_plan_stub_execution_plan_endpoints_and_audit_stream(tmp_path: Path) -> None:
+    import sys
+    from types import SimpleNamespace
+
+    settings = build_settings(
+        tmp_path,
+        robot_adapter="unitree",
+        unitree_network_interface="eth0",
+        unitree_sdk_module="unitree_sdk_for_test",
+        unitree_enable_motor_commands=True,
+        unitree_command_transport="ros2_plan_stub",
+    )
+    sys.modules["unitree_sdk_for_test"] = SimpleNamespace()
+
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/operator?token=dev-operator-token") as operator:
+            assert operator.receive_json()["type"] == "state"
+            operator.send_json(
+                {
+                    "type": "set_mode",
+                    "seq": 1,
+                    "timestamp": time(),
+                    "payload": {"mode": "manual"},
+                }
+            )
+            mode_ack = operator.receive_json()
+            assert mode_ack["unitree_execution_plan"]["execution_plan"]["transport"] == "ros2_plan_stub"
+            assert mode_ack["unitree_execution_plan"]["execution_plan"]["target"] == "/api/sport/request"
+
+            with client.websocket_connect("/ws/operator/audit?token=dev-operator-token") as audit:
+                first = audit.receive_json()
+                second = audit.receive_json()
+                assert {first["type"], second["type"]} == {"command_plan", "execution_plan"}
+                execution_event = first if first["type"] == "execution_plan" else second
+                assert execution_event["unitree_execution_plan"]["execution_plan"]["transport"] == "ros2_plan_stub"
+                assert execution_event["unitree_execution_plan"]["execution_plan"]["target"] == "/api/sport/request"
+
+        latest = client.get("/unitree/execution-plan")
+        assert latest.status_code == 200
+        assert latest.json()["execution_plan"]["transport"] == "ros2_plan_stub"
+        assert latest.json()["execution_plan"]["target"] == "/api/sport/request"
+
+        history = client.get("/unitree/execution-plans")
+        assert history.status_code == 200
+        assert len(history.json()) == 1
+        assert history.json()[0]["execution_plan"]["command_type"] == "set_mode"
+
+        runtime = client.get("/runtime")
+        assert runtime.json()["unitree_execution_plan"]["available"] is True
+        assert runtime.json()["unitree_execution_plan"]["plans"] == 1
+        assert runtime.json()["unitree_execution_plan"]["source"] == "live"
 
 
 def test_unitree_command_plan_missing_before_any_accept(tmp_path: Path) -> None:

@@ -164,10 +164,28 @@ contains the dry-run Unitree translation record for that accepted command:
 - `stale=true|false`
 - `plan` with the translated Unitree action payload
 
+When the selected adapter transport emits a concrete execution stub plan, `ack`
+may also include `unitree_execution_plan`, which carries:
+
+- `recorded_at`
+- `source=live|restored`
+- `stale=true|false`
+- `execution_plan.transport`
+- `execution_plan.surface`
+- `execution_plan.target`
+- `execution_plan.payload`
+
 ### `command_plan`
 
 The audit endpoint replays retained command-plan history on connect and then
 streams one `command_plan` event for each newly accepted operator command.
+
+### `execution_plan`
+
+When the selected adapter transport emits a concrete execution stub plan, the
+same audit endpoint also replays retained execution-plan history on connect and
+then streams one `execution_plan` event for each newly recorded transport-facing
+execution plan.
 
 ### `rejected_command`
 

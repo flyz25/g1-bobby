@@ -116,6 +116,26 @@ def _format_unitree_command_plan_suffix(event: dict[str, Any]) -> str:
     return f" [{' '.join(details)}]" if details else ""
 
 
+def _format_unitree_execution_plan_suffix(event: dict[str, Any]) -> str:
+    record = event.get("unitree_execution_plan")
+    if not isinstance(record, dict):
+        return ""
+    execution_plan = record.get("execution_plan")
+    if not isinstance(execution_plan, dict):
+        return ""
+    details: list[str] = []
+    event_id = record.get("event_id")
+    if isinstance(event_id, int | float):
+        details.append(f"exec_id={int(event_id)}")
+    transport = execution_plan.get("transport")
+    if isinstance(transport, str):
+        details.append(f"transport={transport}")
+    target = execution_plan.get("target")
+    if isinstance(target, str):
+        details.append(f"exec_target={target}")
+    return f" [{' '.join(details)}]" if details else ""
+
+
 def _format_unitree_command_plan_record(record: dict[str, Any]) -> str:
     plan = record.get("plan")
     if not isinstance(plan, dict):
@@ -161,6 +181,32 @@ def _format_rejected_command_record(record: dict[str, Any]) -> str:
     return "rejected-command " + " ".join(details)
 
 
+def _format_unitree_execution_plan_record(record: dict[str, Any]) -> str:
+    execution_plan = record.get("execution_plan")
+    if not isinstance(execution_plan, dict):
+        return "execution-plan"
+    details: list[str] = []
+    event_id = record.get("event_id")
+    if isinstance(event_id, int | float):
+        details.append(f"id={int(event_id)}")
+    transport = execution_plan.get("transport")
+    if isinstance(transport, str):
+        details.append(f"transport={transport}")
+    command_type = execution_plan.get("command_type")
+    if isinstance(command_type, str):
+        details.append(f"command={command_type}")
+    target = execution_plan.get("target")
+    if isinstance(target, str):
+        details.append(f"target={target}")
+    source = record.get("source")
+    if isinstance(source, str):
+        details.append(f"source={source}")
+    stale = record.get("stale")
+    if isinstance(stale, bool) and stale:
+        details.append("stale=true")
+    return "execution-plan " + " ".join(details)
+
+
 def format_event(raw_text: str, raw: bool = False) -> str:
     if raw:
         return raw_text
@@ -202,6 +248,7 @@ def format_event(raw_text: str, raw: bool = False) -> str:
             f"command={event.get('command_type')} "
             f"message={event.get('message')}"
             f"{_format_unitree_command_plan_suffix(event)}"
+            f"{_format_unitree_execution_plan_suffix(event)}"
         )
     if event_type == "command_plan":
         record = event.get("unitree_command_plan")
@@ -211,6 +258,10 @@ def format_event(raw_text: str, raw: bool = False) -> str:
         record = event.get("rejected_command")
         if isinstance(record, dict):
             return _format_rejected_command_record(record)
+    if event_type == "execution_plan":
+        record = event.get("unitree_execution_plan")
+        if isinstance(record, dict):
+            return _format_unitree_execution_plan_record(record)
     if event_type == "reject":
         return (
             "reject "

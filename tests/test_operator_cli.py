@@ -122,10 +122,14 @@ def test_format_event_summarizes_ack_and_reject() -> None:
         '"unitree_command_plan":{"event_id":11,"recorded_at":123.0,"source":"restored","stale":true,'
         '"plan":{"seq":7,"type":"move_velocity","transport":"dry_run",'
         '"action":"motion.velocity","unitree_target":"base_velocity",'
-        '"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}}}'
+        '"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}},'
+        '"unitree_execution_plan":{"event_id":12,"recorded_at":124.0,"source":"live","stale":false,'
+        '"execution_plan":{"transport":"ros2_plan_stub","command_type":"move_velocity","binding_mode":"low_level_motor",'
+        '"surface":"LowCmd","target":"/lowcmd","payload":{"duration_ms":100},"note":"n"}}}'
     ) == (
         "ack seq=7 command=move_velocity message=accepted "
         "[id=11 action=motion.velocity target=base_velocity source=restored stale=true]"
+        " [exec_id=12 transport=ros2_plan_stub exec_target=/lowcmd]"
     )
     assert format_event('{"type":"reject","seq":8,"code":"safety_rejected","reason":"operator heartbeat is stale"}') == (
         "reject seq=8 code=safety_rejected reason=operator heartbeat is stale"
@@ -149,6 +153,18 @@ def test_format_event_summarizes_rejected_command_event() -> None:
     ) == (
         "rejected-command id=12 seq=9 code=safety_rejected command=move_velocity "
         "source=restored stale=true reason=operator heartbeat is stale"
+    )
+
+
+def test_format_event_summarizes_execution_plan_event() -> None:
+    assert format_event(
+        '{"type":"execution_plan","unitree_execution_plan":{"event_id":13,"recorded_at":123.0,"source":"restored","stale":true,'
+        '"execution_plan":{"transport":"sdk_plan_stub","command_type":"set_mode","binding_mode":"sport_service",'
+        '"surface":"request_response","target":"SportClient/basic service request","payload":{"operation":"switch_mode"},'
+        '"note":"n"}}}'
+    ) == (
+        "execution-plan id=13 transport=sdk_plan_stub command=set_mode "
+        "target=SportClient/basic service request source=restored stale=true"
     )
 
 

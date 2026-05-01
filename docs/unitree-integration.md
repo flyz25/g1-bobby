@@ -170,6 +170,17 @@ It also keeps a short in-memory history window for recent accepted plans:
 GET /unitree/command-plans
 ```
 
+For plan-backed execution stubs, the API also stores the latest emitted
+transport-facing execution plan:
+
+```text
+GET /unitree/execution-plan
+GET /unitree/execution-plans
+```
+
+These records differ from `/unitree/command-plan`: they show the normalized
+ROS2 or SDK execution target actually consumed by the selected stub transport.
+
 In WSL2, `eth0` is usually a NAT interface. DDS multicast to a physical robot
 may require WSL mirrored networking, a bridged adapter setup, or running this
 container on a native Linux host connected to the robot network.

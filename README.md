@@ -153,6 +153,13 @@ History audit ringkas juga tersedia di:
 http://localhost:8010/unitree/command-plans
 ```
 
+Untuk plan-backed execution stub, API juga expose latest emitted execution plan:
+
+```text
+http://localhost:8010/unitree/execution-plan
+http://localhost:8010/unitree/execution-plans
+```
+
 Rejected-command audit juga tersedia di:
 
 ```text
@@ -205,7 +212,9 @@ The API persists the latest Unitree snapshot to
 listener post arrives. It also persists the recent Unitree dry-run command-plan
 window to `G1_BOBBY_UNITREE_COMMAND_PLAN_CACHE_PATH`, so
 `/unitree/command-plan`, `/unitree/command-plans`, `/operator/rejection`, and
-`/operator/rejections` survive a plain API restart as well. Served
+`/operator/rejections` survive a plain API restart as well. Plan-backed
+execution stubs also persist `/unitree/execution-plan` and
+`/unitree/execution-plans` when their cache path is enabled. Served
 `unitree_state` payloads now include:
 
 ```text

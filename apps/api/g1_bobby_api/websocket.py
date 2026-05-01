@@ -11,6 +11,7 @@ from g1_bobby_contracts import (
     AckEvent,
     CommandEnvelope,
     CommandPlanEvent,
+    ExecutionPlanEvent,
     ErrorCode,
     RejectedCommandEvent,
     RejectEvent,
@@ -130,6 +131,12 @@ async def operator_socket(websocket: WebSocket) -> None:
                 continue
 
             unitree_command_plan = await runtime.record_unitree_command_plan(command)
+            consume_execution_plan = getattr(runtime.adapter, "consume_last_execution_plan", None)
+            unitree_execution_plan = None
+            if callable(consume_execution_plan):
+                execution_plan = consume_execution_plan()
+                if execution_plan is not None:
+                    unitree_execution_plan = await runtime.record_unitree_execution_plan(execution_plan)
             runtime.record_accepted_command()
             await send_event(
                 websocket,
@@ -137,6 +144,7 @@ async def operator_socket(websocket: WebSocket) -> None:
                     seq=command.seq,
                     command_type=str(command.type),
                     unitree_command_plan=unitree_command_plan,
+                    unitree_execution_plan=unitree_execution_plan,
                 ),
             )
     except WebSocketDisconnect:
@@ -177,6 +185,7 @@ async def operator_audit_socket(websocket: WebSocket) -> None:
 
     await websocket.accept()
     plan_subscription = await runtime.subscribe_unitree_command_plans()
+    execution_plan_subscription = await runtime.subscribe_unitree_execution_plans()
     reject_subscription = await runtime.subscribe_rejected_commands()
     try:
         replay_events: list[tuple[float, object]] = []
@@ -186,11 +195,18 @@ async def operator_audit_socket(websocket: WebSocket) -> None:
         for record in await runtime.get_rejected_command_history():
             if record.event_id > after_id:
                 replay_events.append((record.recorded_at, RejectedCommandEvent(rejected_command=record)))
+        for record in await runtime.get_unitree_execution_plan_history():
+            if record.event_id > after_id:
+                replay_events.append((record.recorded_at, ExecutionPlanEvent(unitree_execution_plan=record)))
         replay_events.sort(
             key=lambda item: (
                 item[1].unitree_command_plan.event_id
                 if isinstance(item[1], CommandPlanEvent)
-                else item[1].rejected_command.event_id
+                else (
+                    item[1].unitree_execution_plan.event_id
+                    if isinstance(item[1], ExecutionPlanEvent)
+                    else item[1].rejected_command.event_id
+                )
             )
         )
 
@@ -199,9 +215,10 @@ async def operator_audit_socket(websocket: WebSocket) -> None:
 
         while True:
             plan_task = asyncio.create_task(plan_subscription.get())
+            execution_plan_task = asyncio.create_task(execution_plan_subscription.get())
             reject_task = asyncio.create_task(reject_subscription.get())
             done, pending = await asyncio.wait(
-                {plan_task, reject_task},
+                {plan_task, execution_plan_task, reject_task},
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for task in pending:
@@ -210,12 +227,15 @@ async def operator_audit_socket(websocket: WebSocket) -> None:
                 record = task.result()
                 if task is plan_task:
                     await send_event(websocket, CommandPlanEvent(unitree_command_plan=record))
+                elif task is execution_plan_task:
+                    await send_event(websocket, ExecutionPlanEvent(unitree_execution_plan=record))
                 else:
                     await send_event(websocket, RejectedCommandEvent(rejected_command=record))
     except WebSocketDisconnect:
         pass
     finally:
         await runtime.unsubscribe_unitree_command_plans(plan_subscription)
+        await runtime.unsubscribe_unitree_execution_plans(execution_plan_subscription)
         await runtime.unsubscribe_rejected_commands(reject_subscription)
 
 

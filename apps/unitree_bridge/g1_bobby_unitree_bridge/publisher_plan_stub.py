@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from g1_bobby_contracts import CommandEnvelope, UnitreeCommandPlanRecord
+from g1_bobby_contracts import CommandEnvelope, UnitreeCommandPlanRecord, UnitreeExecutionPlan
 from pydantic import TypeAdapter
 
 from g1_bobby_adapters.unitree_transport import (
@@ -16,13 +15,6 @@ from g1_bobby_adapters.unitree_transport import (
 from g1_bobby_unitree_bridge.publisher_ros2 import Ros2PublishPlan, build_ros2_publish_plan
 from g1_bobby_unitree_bridge.publisher_sdk import SdkPublishPlan, build_sdk_publish_plan
 
-
-@dataclass(frozen=True)
-class EmittedPlanRecord:
-    transport: str
-    plan: dict[str, Any]
-
-
 class PlanStubUnitreeCommandPublisher:
     def __init__(self, *, transport: str) -> None:
         if transport not in {"ros2_plan_stub", "sdk_plan_stub"}:
@@ -30,7 +22,7 @@ class PlanStubUnitreeCommandPublisher:
         self._transport = transport
         self._next_event_id = 1
         self._published: list[UnitreeCommandPlanRecord] = []
-        self._emitted: list[EmittedPlanRecord] = []
+        self._emitted: list[UnitreeExecutionPlan] = []
 
     async def connect(self) -> None:
         return None
@@ -52,19 +44,46 @@ class PlanStubUnitreeCommandPublisher:
         )
         self._next_event_id += 1
         self._published.append(record)
-        self._emitted.append(EmittedPlanRecord(transport=self._transport, plan=plan.__dict__))
+        self._emitted.append(_normalize_execution_plan(self._transport, plan.__dict__))
         return record
 
     def published_records(self) -> list[UnitreeCommandPlanRecord]:
         return [record.model_copy(deep=True) for record in self._published]
 
-    def emitted_plans(self) -> list[EmittedPlanRecord]:
-        return [EmittedPlanRecord(transport=item.transport, plan=dict(item.plan)) for item in self._emitted]
+    def emitted_plans(self) -> list[UnitreeExecutionPlan]:
+        return [item.model_copy(deep=True) for item in self._emitted]
+
+    def consume_last_execution_plan(self) -> UnitreeExecutionPlan | None:
+        if not self._emitted:
+            return None
+        return self._emitted[-1].model_copy(deep=True)
 
     def _build_plan(self, command: CommandEnvelope) -> Ros2PublishPlan | SdkPublishPlan | None:
         if self._transport == "ros2_plan_stub":
             return build_ros2_publish_plan(command)
         return build_sdk_publish_plan(command)
+
+
+def _normalize_execution_plan(transport: str, plan: dict[str, Any]) -> UnitreeExecutionPlan:
+    if "topic" in plan and "msg_type" in plan:
+        return UnitreeExecutionPlan(
+            transport=transport,
+            command_type=str(plan["command_type"]),
+            binding_mode=str(plan["binding_mode"]),
+            surface=str(plan["msg_type"]),
+            target=str(plan["topic"]),
+            payload=dict(plan["payload"]),
+            note=str(plan["note"]),
+        )
+    return UnitreeExecutionPlan(
+        transport=transport,
+        command_type=str(plan["command_type"]),
+        binding_mode=str(plan["binding_mode"]),
+        surface=str(plan["transport_surface"]),
+        target=str(plan["binding_target"]),
+        payload=dict(plan["payload"]),
+        note=str(plan["note"]),
+    )
 
 
 command_adapter = TypeAdapter(CommandEnvelope)
@@ -109,7 +128,7 @@ async def _run_publish(args: argparse.Namespace) -> dict[str, Any]:
         await publisher.disconnect()
     return {
         "records": [record.model_dump(mode="json") for record in records],
-        "emitted_plans": [{"transport": item.transport, "plan": item.plan} for item in emitted],
+        "emitted_plans": [item.model_dump(mode="json") for item in emitted],
     }
 
 
