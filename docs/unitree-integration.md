@@ -111,6 +111,7 @@ The image is based on Ubuntu 22.04 / ROS2 Humble and builds:
 - `g1-bobby-unitree-probe`
 - `g1-bobby-unitree-listen`
 - `g1-bobby-unitree-command-dry-run`
+- `g1-bobby-unitree-publish-plan`
 - `g1-bobby-unitree-sim`
 
 Local-only probe:
@@ -139,6 +140,14 @@ docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
 This command bridge is intentionally audit-only for now. It translates validated
 operator commands into a concrete Unitree dry-run action plan, but it does not
 publish DDS or send motor commands yet.
+
+Concrete ROS2 or SDK publish-plan rendering, without transport execution:
+
+```bash
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  g1-bobby-unitree-publish-plan --transport sdk_real --command-json \
+  '{"type":"set_mode","seq":1,"timestamp":123.0,"payload":{"mode":"manual"}}'
+```
 
 At runtime, the API stores the latest accepted dry-run plan and exposes it via:
 

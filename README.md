@@ -127,6 +127,13 @@ g1-bobby-unitree-publish-stub --command-json \
   '{"type":"move_velocity","seq":3,"timestamp":123.0,"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}'
 ```
 
+Inspect concrete ROS2 or SDK publish-plan skeletons, still without transport execution:
+
+```bash
+g1-bobby-unitree-publish-plan --transport ros2_real --command-json \
+  '{"type":"move_velocity","seq":3,"timestamp":123.0,"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}'
+```
+
 The API also exposes the latest accepted dry-run translation at:
 
 ```text
