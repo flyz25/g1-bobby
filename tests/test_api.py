@@ -1,3 +1,4 @@
+from pathlib import Path
 from time import time
 
 from fastapi.testclient import TestClient
@@ -25,8 +26,16 @@ UNITREE_SNAPSHOT = {
 }
 
 
-def test_health_and_state_endpoints() -> None:
-    with TestClient(create_app(Settings(_env_file=None))) as client:
+def build_settings(tmp_path: Path, **kwargs) -> Settings:
+    return Settings(
+        _env_file=None,
+        unitree_state_cache_path=tmp_path / "unitree-state.json",
+        **kwargs,
+    )
+
+
+def test_health_and_state_endpoints(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path))) as client:
         health = client.get("/health")
         assert health.status_code == 200
         assert health.json() == {"status": "online"}
@@ -46,8 +55,8 @@ def test_health_and_state_endpoints() -> None:
         assert body["state"]["connected"] is True
 
 
-def test_estop_and_reset_estop() -> None:
-    with TestClient(create_app(Settings(_env_file=None))) as client:
+def test_estop_and_reset_estop(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path))) as client:
         estop = client.post("/estop")
         assert estop.status_code == 200
         assert estop.json()["state"]["estop_engaged"] is True
@@ -60,15 +69,15 @@ def test_estop_and_reset_estop() -> None:
         assert reset.json()["state"]["estop_engaged"] is False
 
 
-def test_reset_estop_requires_operator_token() -> None:
-    with TestClient(create_app(Settings(_env_file=None))) as client:
+def test_reset_estop_requires_operator_token(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path))) as client:
         reset = client.post("/reset-estop")
         assert reset.status_code == 401
         assert reset.json()["detail"] == "invalid operator token"
 
 
-def test_unitree_state_ingest_and_readback() -> None:
-    with TestClient(create_app(Settings(_env_file=None))) as client:
+def test_unitree_state_ingest_and_readback(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path))) as client:
         missing = client.get("/unitree/state")
         assert missing.status_code == 404
 
@@ -100,16 +109,36 @@ def test_unitree_state_ingest_and_readback() -> None:
         assert runtime.json()["unitree_state"]["updates"] == 1
 
 
-def test_websocket_rejects_invalid_token() -> None:
-    with TestClient(create_app(Settings(_env_file=None))) as client:
+def test_websocket_rejects_invalid_token(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path))) as client:
         with client.websocket_connect("/ws/operator?token=bad") as websocket:
             event = websocket.receive_json()
             assert event["type"] == "reject"
             assert event["code"] == "auth_failed"
 
 
-def test_websocket_state_and_telemetry_include_unitree_snapshot() -> None:
-    settings = Settings(_env_file=None, telemetry_interval_s=0.01)
+def test_unitree_state_is_restored_after_app_restart(tmp_path: Path) -> None:
+    settings = build_settings(tmp_path)
+    with TestClient(create_app(settings)) as client:
+        accepted = client.post(
+            "/unitree/state",
+            json=UNITREE_SNAPSHOT,
+            headers={"X-Operator-Token": "dev-operator-token"},
+        )
+        assert accepted.status_code == 200
+
+    with TestClient(create_app(settings)) as restarted_client:
+        restored_runtime = restarted_client.get("/runtime")
+        assert restored_runtime.json()["unitree_state"]["status"] == "receiving"
+        assert restored_runtime.json()["unitree_state"]["updates"] == 1
+
+        restored_state = restarted_client.get("/state")
+        assert restored_state.json()["state"]["pose_label"] == "unitree-g1 x=0.00 y=0.00 z=1.20"
+        assert restored_state.json()["unitree_state"]["status"] == "receiving"
+
+
+def test_websocket_state_and_telemetry_include_unitree_snapshot(tmp_path: Path) -> None:
+    settings = build_settings(tmp_path, telemetry_interval_s=0.01)
     with TestClient(create_app(settings)) as client:
         accepted = client.post(
             "/unitree/state",
@@ -132,8 +161,8 @@ def test_websocket_state_and_telemetry_include_unitree_snapshot() -> None:
             assert telemetry_event["unitree_state"]["sport_mode_state"]["position"][2] == 1.2
 
 
-def test_websocket_rejects_movement_before_ready() -> None:
-    with TestClient(create_app(Settings(_env_file=None))) as client:
+def test_websocket_rejects_movement_before_ready(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path))) as client:
         with client.websocket_connect("/ws/operator?token=dev-operator-token") as websocket:
             assert websocket.receive_json()["type"] == "state"
             websocket.send_json(
@@ -155,8 +184,8 @@ def test_websocket_rejects_movement_before_ready() -> None:
             assert event["code"] == "safety_rejected"
 
 
-def test_websocket_accepts_safe_manual_movement() -> None:
-    with TestClient(create_app(Settings(_env_file=None))) as client:
+def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path))) as client:
         with client.websocket_connect("/ws/operator?token=dev-operator-token") as websocket:
             assert websocket.receive_json()["type"] == "state"
 
@@ -198,8 +227,8 @@ def test_websocket_accepts_safe_manual_movement() -> None:
             assert event["seq"] == 3
 
 
-def test_websocket_rejects_replayed_sequence() -> None:
-    with TestClient(create_app(Settings(_env_file=None))) as client:
+def test_websocket_rejects_replayed_sequence(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path))) as client:
         with client.websocket_connect("/ws/operator?token=dev-operator-token") as websocket:
             assert websocket.receive_json()["type"] == "state"
 
@@ -227,8 +256,8 @@ def test_websocket_rejects_replayed_sequence() -> None:
             assert event["code"] == "replayed_command"
 
 
-def test_websocket_rejects_stale_command_timestamp() -> None:
-    with TestClient(create_app(Settings(_env_file=None, command_max_age_s=0.1))) as client:
+def test_websocket_rejects_stale_command_timestamp(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path, command_max_age_s=0.1))) as client:
         with client.websocket_connect("/ws/operator?token=dev-operator-token") as websocket:
             assert websocket.receive_json()["type"] == "state"
             websocket.send_json(

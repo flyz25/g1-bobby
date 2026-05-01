@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     unitree_network_interface: str | None = None
     unitree_sdk_module: str = Field(default="unitree_sdk2py", min_length=1)
     unitree_enable_motor_commands: bool = False
+    unitree_state_cache_path: Path = Path(".runtime/unitree_state.json")
 
     safety_max_linear_mps: float = Field(default=0.35, gt=0.0)
     safety_max_angular_radps: float = Field(default=0.6, gt=0.0)

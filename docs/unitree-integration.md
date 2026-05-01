@@ -150,7 +150,13 @@ G1_BOBBY_UNITREE_SIM_PRINT_SCENE_INFO=false
 G1_BOBBY_UNITREE_LISTEN_SAMPLE_INTERVAL_S=1
 G1_BOBBY_UNITREE_LISTEN_MAX_MOTORS=6
 G1_BOBBY_API_URL=http://127.0.0.1:8010
+G1_BOBBY_UNITREE_STATE_CACHE_PATH=.runtime/unitree_state.json
 ```
+
+The API writes the latest accepted Unitree snapshot to
+`G1_BOBBY_UNITREE_STATE_CACHE_PATH`. On API process restart, it restores that
+cached snapshot during startup so `/unitree/state`, `/state`, and operator
+telemetry can recover immediately even before the next DDS post arrives.
 
 Override the scene when needed:
 

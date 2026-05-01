@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+import json
+from pathlib import Path
 from time import time
 from typing import Any
 
 from g1_bobby_adapters import RobotAdapter, create_robot_adapter
 from g1_bobby_contracts import RobotState, UnitreeDdsSnapshot
+from pydantic import ValidationError
 from g1_bobby_safety import SafetyValidator
 
 from .config import Settings
@@ -22,6 +25,7 @@ class Runtime:
     active_operator_session_id: str | None = None
     unitree_state_updates: int = 0
     unitree_state_received_at: float | None = None
+    unitree_state_cache_path: Path = field(default_factory=lambda: Path(".runtime/unitree_state.json"))
     _unitree_state: UnitreeDdsSnapshot | None = field(default=None, init=False, repr=False)
     _operator_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _unitree_state_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
@@ -34,11 +38,14 @@ class Runtime:
             unitree_config=resolved_settings.unitree_config(),
         )
         await adapter.connect()
-        return cls(
+        runtime = cls(
             adapter=adapter,
             safety=SafetyValidator(resolved_settings.safety_limits()),
             adapter_name=str(resolved_settings.robot_adapter),
+            unitree_state_cache_path=resolved_settings.unitree_state_cache_path,
         )
+        await runtime.load_persisted_unitree_state()
+        return runtime
 
     @property
     def active_operator_connected(self) -> bool:
@@ -82,11 +89,34 @@ class Runtime:
         projected.obstacle_distance_m = None
         return projected
 
+    def _persist_unitree_state(self, snapshot: UnitreeDdsSnapshot) -> None:
+        self.unitree_state_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.unitree_state_cache_path.with_suffix(f"{self.unitree_state_cache_path.suffix}.tmp")
+        tmp_path.write_text(snapshot.model_dump_json(), encoding="utf-8")
+        tmp_path.replace(self.unitree_state_cache_path)
+
     async def record_unitree_state(self, snapshot: UnitreeDdsSnapshot) -> None:
         async with self._unitree_state_lock:
             self._unitree_state = snapshot
             self.unitree_state_updates += 1
             self.unitree_state_received_at = time()
+            self._persist_unitree_state(snapshot)
+
+    async def load_persisted_unitree_state(self) -> bool:
+        if not self.unitree_state_cache_path.exists():
+            return False
+        try:
+            snapshot = UnitreeDdsSnapshot.model_validate_json(
+                self.unitree_state_cache_path.read_text(encoding="utf-8")
+            )
+        except (OSError, ValidationError, json.JSONDecodeError):
+            return False
+
+        async with self._unitree_state_lock:
+            self._unitree_state = snapshot
+            self.unitree_state_updates = 1
+            self.unitree_state_received_at = time()
+        return True
 
     async def get_unitree_state(self) -> UnitreeDdsSnapshot | None:
         async with self._unitree_state_lock:

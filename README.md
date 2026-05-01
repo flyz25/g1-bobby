@@ -139,7 +139,13 @@ G1_BOBBY_UNITREE_SIM_PRINT_SCENE_INFO=false
 G1_BOBBY_UNITREE_LISTEN_SAMPLE_INTERVAL_S=1
 G1_BOBBY_UNITREE_LISTEN_MAX_MOTORS=6
 G1_BOBBY_API_URL=http://127.0.0.1:8010
+G1_BOBBY_UNITREE_STATE_CACHE_PATH=.runtime/unitree_state.json
 ```
+
+The API persists the latest Unitree snapshot to
+`G1_BOBBY_UNITREE_STATE_CACHE_PATH`, so a plain API restart can restore
+`/unitree/state` and the read-only projected `/state` view even before the next
+listener post arrives.
 
 WSLg should provide `DISPLAY`, `WAYLAND_DISPLAY`, and `/mnt/wslg`. RTX GPU
 acceleration is more relevant for the heavier IsaacLab path; MuJoCo is the

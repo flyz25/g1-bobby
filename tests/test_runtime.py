@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from g1_bobby_adapters import (
@@ -10,6 +12,15 @@ from g1_bobby_adapters import (
 from g1_bobby_api.config import RobotAdapterName, Settings
 from g1_bobby_api.runtime import Runtime
 from g1_bobby_contracts import UnitreeDdsSnapshot
+
+
+def build_settings(tmp_path: Path, **kwargs) -> Settings:
+    cache_path = kwargs.pop("unitree_state_cache_path", tmp_path / "unitree-state.json")
+    return Settings(
+        _env_file=None,
+        unitree_state_cache_path=cache_path,
+        **kwargs,
+    )
 
 
 def test_default_settings_select_mock_adapter() -> None:
@@ -75,8 +86,8 @@ def test_adapter_factory_rejects_unknown_adapter() -> None:
 
 
 @pytest.mark.asyncio
-async def test_runtime_create_uses_mock_by_default() -> None:
-    runtime = await Runtime.create(Settings(_env_file=None))
+async def test_runtime_create_uses_mock_by_default(tmp_path: Path) -> None:
+    runtime = await Runtime.create(build_settings(tmp_path))
 
     try:
         assert runtime.adapter_name == "mock"
@@ -90,8 +101,8 @@ async def test_runtime_create_uses_mock_by_default() -> None:
 
 
 @pytest.mark.asyncio
-async def test_runtime_allows_only_one_operator_session() -> None:
-    runtime = await Runtime.create(Settings(_env_file=None))
+async def test_runtime_allows_only_one_operator_session(tmp_path: Path) -> None:
+    runtime = await Runtime.create(build_settings(tmp_path))
 
     try:
         assert await runtime.claim_operator_session("session-1")
@@ -109,8 +120,8 @@ async def test_runtime_allows_only_one_operator_session() -> None:
 
 
 @pytest.mark.asyncio
-async def test_runtime_stores_unitree_state_snapshot() -> None:
-    runtime = await Runtime.create(Settings(_env_file=None))
+async def test_runtime_stores_unitree_state_snapshot(tmp_path: Path) -> None:
+    runtime = await Runtime.create(build_settings(tmp_path))
     snapshot = UnitreeDdsSnapshot.model_validate(
         {
             "status": "receiving",
@@ -144,8 +155,8 @@ async def test_runtime_stores_unitree_state_snapshot() -> None:
 
 
 @pytest.mark.asyncio
-async def test_runtime_projects_unitree_snapshot_into_display_state() -> None:
-    runtime = await Runtime.create(Settings(_env_file=None))
+async def test_runtime_projects_unitree_snapshot_into_display_state(tmp_path: Path) -> None:
+    runtime = await Runtime.create(build_settings(tmp_path))
     snapshot = UnitreeDdsSnapshot.model_validate(
         {
             "status": "receiving",
@@ -176,6 +187,48 @@ async def test_runtime_projects_unitree_snapshot_into_display_state() -> None:
         assert state.pose_label == "unitree-g1 x=0.12 y=-0.34 z=1.28"
     finally:
         await runtime.adapter.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_runtime_persists_and_reloads_unitree_snapshot(tmp_path: Path) -> None:
+    cache_path = tmp_path / "unitree-state.json"
+    settings = build_settings(tmp_path, unitree_state_cache_path=cache_path)
+    runtime = await Runtime.create(settings)
+    snapshot = UnitreeDdsSnapshot.model_validate(
+        {
+            "status": "receiving",
+            "timestamp_s": 789.0,
+            "dds": {
+                "domain_id": 1,
+                "interface": "lo",
+                "robot": "g1",
+                "topics": {
+                    "low_state": "rt/lowstate",
+                    "sport_mode_state": "rt/sportmodestate",
+                },
+            },
+            "sample_counts": {"low_state": 2, "sport_mode_state": 3},
+            "ages_s": {"low_state": 0.0, "sport_mode_state": 0.0},
+            "low_state": {"motor_count": 35},
+            "sport_mode_state": {"position": [0.01, 0.02, 1.23]},
+        }
+    )
+
+    try:
+        await runtime.record_unitree_state(snapshot)
+        assert cache_path.exists()
+    finally:
+        await runtime.adapter.disconnect()
+
+    reloaded = await Runtime.create(settings)
+    try:
+        assert await reloaded.get_unitree_state() == snapshot
+        assert (await reloaded.get_display_state()).pose_label == "unitree-g1 x=0.01 y=0.02 z=1.23"
+        status = await reloaded.unitree_state_status()
+        assert status["status"] == "receiving"
+        assert status["updates"] == 1
+    finally:
+        await reloaded.adapter.disconnect()
 
 
 @pytest.mark.asyncio
