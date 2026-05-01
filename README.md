@@ -159,12 +159,16 @@ G1_BOBBY_UNITREE_LISTEN_SAMPLE_INTERVAL_S=1
 G1_BOBBY_UNITREE_LISTEN_MAX_MOTORS=6
 G1_BOBBY_API_URL=http://127.0.0.1:8010
 G1_BOBBY_UNITREE_STATE_CACHE_PATH=.runtime/unitree_state.json
+G1_BOBBY_UNITREE_COMMAND_PLAN_CACHE_PATH=.runtime/unitree_command_plans.jsonl
 ```
 
 The API persists the latest Unitree snapshot to
 `G1_BOBBY_UNITREE_STATE_CACHE_PATH`, so a plain API restart can restore
 `/unitree/state` and the read-only projected `/state` view even before the next
-listener post arrives. Served `unitree_state` payloads now include:
+listener post arrives. It also persists the recent Unitree dry-run command-plan
+window to `G1_BOBBY_UNITREE_COMMAND_PLAN_CACHE_PATH`, so
+`/unitree/command-plan` and `/unitree/command-plans` survive a plain API
+restart as well. Served `unitree_state` payloads now include:
 
 ```text
 source=live|restored

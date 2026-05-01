@@ -176,12 +176,16 @@ G1_BOBBY_UNITREE_LISTEN_SAMPLE_INTERVAL_S=1
 G1_BOBBY_UNITREE_LISTEN_MAX_MOTORS=6
 G1_BOBBY_API_URL=http://127.0.0.1:8010
 G1_BOBBY_UNITREE_STATE_CACHE_PATH=.runtime/unitree_state.json
+G1_BOBBY_UNITREE_COMMAND_PLAN_CACHE_PATH=.runtime/unitree_command_plans.jsonl
 ```
 
 The API writes the latest accepted Unitree snapshot to
 `G1_BOBBY_UNITREE_STATE_CACHE_PATH`. On API process restart, it restores that
 cached snapshot during startup so `/unitree/state`, `/state`, and operator
 telemetry can recover immediately even before the next DDS post arrives.
+It also restores the recent dry-run command-plan window from
+`G1_BOBBY_UNITREE_COMMAND_PLAN_CACHE_PATH`, so `/unitree/command-plan` and
+`/unitree/command-plans` do not go blank on a plain API restart.
 
 Served `unitree_state` payloads include:
 

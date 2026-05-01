@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     unitree_sdk_module: str = Field(default="unitree_sdk2py", min_length=1)
     unitree_enable_motor_commands: bool = False
     unitree_state_cache_path: Path = Path(".runtime/unitree_state.json")
+    unitree_command_plan_cache_path: Path = Path(".runtime/unitree_command_plans.jsonl")
     unitree_state_ttl_s: float = Field(default=2.0, gt=0.0)
     unitree_command_plan_history_size: int = Field(default=10, gt=0)
 

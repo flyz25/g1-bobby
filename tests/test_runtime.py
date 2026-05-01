@@ -17,9 +17,11 @@ from g1_bobby_contracts.commands import CommandType, MoveVelocityCommand, MoveVe
 
 def build_settings(tmp_path: Path, **kwargs) -> Settings:
     cache_path = kwargs.pop("unitree_state_cache_path", tmp_path / "unitree-state.json")
+    command_plan_cache_path = kwargs.pop("unitree_command_plan_cache_path", tmp_path / "unitree-command-plans.jsonl")
     return Settings(
         _env_file=None,
         unitree_state_cache_path=cache_path,
+        unitree_command_plan_cache_path=command_plan_cache_path,
         **kwargs,
     )
 
@@ -287,6 +289,51 @@ async def test_runtime_trims_unitree_command_plan_history(tmp_path: Path) -> Non
         assert status["history_size"] == 2
     finally:
         await runtime.adapter.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_runtime_persists_and_reloads_unitree_command_plan_history(tmp_path: Path) -> None:
+    settings = build_settings(
+        tmp_path,
+        unitree_command_plan_history_size=2,
+        unitree_command_plan_cache_path=tmp_path / "unitree-command-plans.jsonl",
+    )
+    runtime = await Runtime.create(settings)
+
+    try:
+        for seq in (1, 2, 3):
+            await runtime.record_unitree_command_plan(
+                MoveVelocityCommand(
+                    type=CommandType.MOVE_VELOCITY,
+                    seq=seq,
+                    timestamp=100.0 + seq,
+                    payload=MoveVelocityPayload(
+                        linear_x=0.1 * seq,
+                        linear_y=0.0,
+                        angular_z=0.0,
+                        duration_ms=100,
+                    ),
+                )
+            )
+        assert settings.unitree_command_plan_cache_path.exists()
+    finally:
+        await runtime.adapter.disconnect()
+
+    reloaded = await Runtime.create(settings)
+    try:
+        history = await reloaded.get_unitree_command_plan_history()
+        assert [plan.seq for plan in history] == [2, 3]
+        last_plan = await reloaded.get_last_unitree_command_plan()
+        assert last_plan is not None
+        assert last_plan.seq == 3
+        status = await reloaded.unitree_command_plan_status()
+        assert status["available"] is True
+        assert status["plans"] == 2
+        assert status["retained"] == 2
+        assert status["history_size"] == 2
+        assert status["last_recorded_at"] is not None
+    finally:
+        await reloaded.adapter.disconnect()
 
 
 @pytest.mark.asyncio
