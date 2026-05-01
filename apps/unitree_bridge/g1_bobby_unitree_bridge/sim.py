@@ -15,6 +15,7 @@ DEFAULT_ROBOT = "g1"
 DEFAULT_SCENE = "scene_29dof.xml"
 DEFAULT_DOMAIN_ID = 1
 DEFAULT_INTERFACE = "lo"
+HUMANOID_ROBOTS = {"g1", "h1", "h1_2"}
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,8 @@ class UnitreeMujocoConfig:
     scene: str
     domain_id: int
     interface: str
+    print_scene_information: bool
+    enable_elastic_band: bool
     extra_args: tuple[str, ...] = ()
 
 
@@ -35,12 +38,20 @@ def env_default(env: Mapping[str, str], key: str, default: str) -> str:
     return value
 
 
+def env_bool(env: Mapping[str, str], key: str, default: bool) -> bool:
+    value = env.get(key)
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def default_binary_for(sim_root: Path) -> Path:
     return sim_root / "build" / "unitree_mujoco"
 
 
 def build_parser(env: Mapping[str, str] | None = None) -> argparse.ArgumentParser:
     source_env = environ if env is None else env
+    default_robot = env_default(source_env, "G1_BOBBY_UNITREE_SIM_ROBOT", DEFAULT_ROBOT)
     default_sim_root = Path(
         env_default(
             source_env,
@@ -68,7 +79,7 @@ def build_parser(env: Mapping[str, str] | None = None) -> argparse.ArgumentParse
     )
     parser.add_argument(
         "--robot",
-        default=env_default(source_env, "G1_BOBBY_UNITREE_SIM_ROBOT", DEFAULT_ROBOT),
+        default=default_robot,
         help="Unitree robot model to load.",
     )
     parser.add_argument(
@@ -92,6 +103,22 @@ def build_parser(env: Mapping[str, str] | None = None) -> argparse.ArgumentParse
         "--interface",
         default=env_default(source_env, "G1_BOBBY_UNITREE_DDS_INTERFACE", DEFAULT_INTERFACE),
         help="DDS network interface. Use lo for local simulation.",
+    )
+    parser.add_argument(
+        "--print-scene-info",
+        action=argparse.BooleanOptionalAction,
+        default=env_bool(source_env, "G1_BOBBY_UNITREE_SIM_PRINT_SCENE_INFO", False),
+        help="Print all MuJoCo links, joints, actuators, and sensors at startup.",
+    )
+    parser.add_argument(
+        "--elastic-band",
+        action=argparse.BooleanOptionalAction,
+        default=env_bool(
+            source_env,
+            "G1_BOBBY_UNITREE_SIM_ELASTIC_BAND",
+            default_robot in HUMANOID_ROBOTS,
+        ),
+        help="Enable the virtual elastic band used by humanoid models.",
     )
     parser.add_argument(
         "--mujoco-help",
@@ -121,6 +148,8 @@ def config_from_args(
         scene=args.scene,
         domain_id=args.domain_id,
         interface=args.interface,
+        print_scene_information=args.print_scene_info,
+        enable_elastic_band=args.elastic_band,
         extra_args=tuple(forwarded_args),
     )
     return config, args.dry_run
@@ -139,6 +168,30 @@ def build_unitree_mujoco_command(config: UnitreeMujocoConfig) -> list[str]:
         config.interface,
         *config.extra_args,
     ]
+
+
+def render_simulator_config(config: UnitreeMujocoConfig) -> str:
+    return "\n".join(
+        [
+            f'robot: "{config.robot}"',
+            f'robot_scene: "{config.scene}"',
+            f"domain_id: {config.domain_id}",
+            f'interface: "{config.interface}"',
+            "use_joystick: 0",
+            'joystick_type: "xbox"',
+            'joystick_device: "/dev/input/js0"',
+            "joystick_bits: 16",
+            f"print_scene_information: {int(config.print_scene_information)}",
+            f"enable_elastic_band: {int(config.enable_elastic_band)}",
+            "",
+        ]
+    )
+
+
+def write_simulator_config(config: UnitreeMujocoConfig) -> Path:
+    config_path = config.sim_root / "config.yaml"
+    config_path.write_text(render_simulator_config(config), encoding="utf-8")
+    return config_path
 
 
 def build_runtime_env(
@@ -166,10 +219,13 @@ def dry_run_payload(
     return {
         "command": build_unitree_mujoco_command(config),
         "cwd": str(config.sim_root),
+        "simulator_config": render_simulator_config(config),
         "environment": {
             "LD_LIBRARY_PATH": runtime_env.get("LD_LIBRARY_PATH"),
             "G1_BOBBY_UNITREE_DDS_INTERFACE": config.interface,
             "G1_BOBBY_UNITREE_DDS_DOMAIN_ID": config.domain_id,
+            "G1_BOBBY_UNITREE_SIM_ELASTIC_BAND": config.enable_elastic_band,
+            "G1_BOBBY_UNITREE_SIM_PRINT_SCENE_INFO": config.print_scene_information,
         },
     }
 
@@ -185,6 +241,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not config.binary.exists():
         print(f"Unitree MuJoCo binary not found: {config.binary}", file=sys.stderr)
         return 2
+
+    write_simulator_config(config)
 
     return subprocess.call(
         build_unitree_mujoco_command(config),

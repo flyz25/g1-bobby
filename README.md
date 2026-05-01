@@ -96,11 +96,18 @@ G1_BOBBY_UNITREE_DDS_INTERFACE=lo
 G1_BOBBY_UNITREE_DDS_DOMAIN_ID=1
 G1_BOBBY_UNITREE_SIM_ROBOT=g1
 G1_BOBBY_UNITREE_SIM_SCENE=scene_29dof.xml
+G1_BOBBY_UNITREE_SIM_ELASTIC_BAND=true
+G1_BOBBY_UNITREE_SIM_PRINT_SCENE_INFO=false
 ```
 
 WSLg should provide `DISPLAY`, `WAYLAND_DISPLAY`, and `/mnt/wslg`. RTX GPU
 acceleration is more relevant for the heavier IsaacLab path; MuJoCo is the
 baseline simulator for local integration.
+
+For G1, click the simulator window once to focus it. Use `Space` to pause/run,
+mouse drag to move the camera, scroll to zoom, `Backspace` to reset, `9` to
+toggle the virtual elastic band, and `7` / `8` to lower or lift the humanoid.
+Stop the simulator from the terminal with `Ctrl+C`.
 
 The local `lo` interface can print a CycloneDDS multicast warning during smoke
 tests; that is expected for this local simulator path.

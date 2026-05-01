@@ -111,6 +111,8 @@ G1_BOBBY_UNITREE_DDS_INTERFACE=lo
 G1_BOBBY_UNITREE_DDS_DOMAIN_ID=1
 G1_BOBBY_UNITREE_SIM_ROBOT=g1
 G1_BOBBY_UNITREE_SIM_SCENE=scene_29dof.xml
+G1_BOBBY_UNITREE_SIM_ELASTIC_BAND=true
+G1_BOBBY_UNITREE_SIM_PRINT_SCENE_INFO=false
 ```
 
 Override the scene when needed:
@@ -122,6 +124,18 @@ docker compose -f compose.unitree.yml --profile sim run --rm unitree-sim
 
 WSLg GUI forwarding uses the host `DISPLAY`, `WAYLAND_DISPLAY`, `/tmp/.X11-unix`,
 and `/mnt/wslg` mounts configured in `compose.unitree.yml`.
+
+For G1, the launcher writes `simulate/config.yaml` at startup so the humanoid
+virtual elastic band is enabled and the large startup scene dump is disabled.
+Click the simulator window once to focus it, then use:
+
+- `Space` to pause/run
+- mouse drag to move the camera
+- scroll to zoom
+- `Backspace` to reset
+- `9` to toggle the virtual elastic band
+- `7` / `8` to lower or lift the humanoid
+- `Ctrl+C` in the terminal to stop the simulator
 
 When using `lo`, CycloneDDS may warn that loopback is not multicast-capable and
 then disable multicast. That is acceptable for local simulator smoke tests.
