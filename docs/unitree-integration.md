@@ -73,6 +73,7 @@ The image is based on Ubuntu 22.04 / ROS2 Humble and builds:
 - MuJoCo `3.3.6` from Google DeepMind releases
 - `g1-bobby-unitree-probe`
 - `g1-bobby-unitree-listen`
+- `g1-bobby-unitree-command-dry-run`
 - `g1-bobby-unitree-sim`
 
 Local-only probe:
@@ -89,6 +90,18 @@ G1_BOBBY_UNITREE_DDS_INTERFACE=<robot-network-interface> \
 docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
   g1-bobby-unitree-probe --require-ready
 ```
+
+Dry-run command translation, without DDS publish:
+
+```bash
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  g1-bobby-unitree-command-dry-run --command-json \
+  '{"type":"move_velocity","seq":3,"timestamp":123.0,"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}'
+```
+
+This command bridge is intentionally audit-only for now. It translates validated
+operator commands into a concrete Unitree dry-run action plan, but it does not
+publish DDS or send motor commands yet.
 
 In WSL2, `eth0` is usually a NAT interface. DDS multicast to a physical robot
 may require WSL mirrored networking, a bridged adapter setup, or running this

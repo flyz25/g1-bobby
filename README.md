@@ -104,6 +104,13 @@ docker compose -f compose.unitree.yml --profile sim run --rm unitree-sim \
 docker compose -f compose.unitree.yml --profile sim run --rm unitree-sim
 ```
 
+Dry-run command bridge, without DDS publish:
+
+```bash
+g1-bobby-unitree-command-dry-run --command-json \
+  '{"type":"move_velocity","seq":3,"timestamp":123.0,"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}'
+```
+
 Read simulator state from a second terminal:
 
 ```bash
