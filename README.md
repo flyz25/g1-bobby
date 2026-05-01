@@ -76,6 +76,12 @@ Read-only monitor mode, without sending demo commands:
 g1-bobby-operator --url ws://127.0.0.1:8010/ws/operator --telemetry-only --listen-s 5
 ```
 
+Persistent monitor mode with automatic reconnect:
+
+```bash
+g1-bobby-operator --url ws://127.0.0.1:8010/ws/operator --telemetry-only --watch
+```
+
 ## Unitree ROS2 Container
 
 The robot stack runs in a separate Ubuntu 22.04 / ROS2 Humble container so WSL

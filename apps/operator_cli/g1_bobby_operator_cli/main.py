@@ -38,6 +38,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Connect read-only and listen without sending demo or script commands",
     )
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Reconnect automatically after disconnect or connect failure",
+    )
+    parser.add_argument(
+        "--reconnect-delay-s",
+        type=float,
+        default=1.0,
+        help="Delay before retrying when --watch is enabled",
+    )
     parser.add_argument("--raw", action="store_true", help="Print raw JSON events")
     return parser
 
@@ -121,6 +132,18 @@ def print_event(raw_text: str, raw: bool = False) -> None:
     print(format_event(raw_text, raw=raw))
 
 
+def can_retry(exc: Exception) -> bool:
+    return isinstance(exc, OSError | TimeoutError | websockets.WebSocketException)
+
+
+def should_retry(args: argparse.Namespace, exc: Exception) -> bool:
+    return args.watch and can_retry(exc)
+
+
+def should_replay_messages(args: argparse.Namespace) -> bool:
+    return not args.telemetry_only and args.script is None
+
+
 def build_outbound_messages(args: argparse.Namespace) -> list[dict[str, Any]]:
     if args.telemetry_only:
         return []
@@ -142,32 +165,44 @@ def effective_listen_s(args: argparse.Namespace) -> float:
 
 async def run(args: argparse.Namespace) -> int:
     url = attach_token(args.url, args.token)
-    messages = build_outbound_messages(args)
+    outbound_messages = build_outbound_messages(args)
+    replay_on_retry = should_replay_messages(args)
 
-    async with websockets.connect(url, open_timeout=args.timeout_s) as websocket:
-        print_event(await receive_event(websocket, args.timeout_s), raw=args.raw)
-        for message in messages:
-            await websocket.send(json.dumps(message, separators=(",", ":")))
-            print_event(await receive_event(websocket, args.timeout_s), raw=args.raw)
-            if args.delay_s > 0:
-                await asyncio.sleep(args.delay_s)
+    while True:
+        try:
+            async with websockets.connect(url, open_timeout=args.timeout_s) as websocket:
+                print_event(await receive_event(websocket, args.timeout_s), raw=args.raw)
+                for message in outbound_messages:
+                    await websocket.send(json.dumps(message, separators=(",", ":")))
+                    print_event(await receive_event(websocket, args.timeout_s), raw=args.raw)
+                    if args.delay_s > 0:
+                        await asyncio.sleep(args.delay_s)
 
-        listen_s = effective_listen_s(args)
-        if listen_s > 0:
-            listen_until = asyncio.get_running_loop().time() + listen_s
-            while True:
-                timeout_s = listen_until - asyncio.get_running_loop().time()
-                if timeout_s <= 0:
-                    break
-                try:
-                    print_event(
-                        await receive_event(websocket, min(timeout_s, args.timeout_s)),
-                        raw=args.raw,
-                    )
-                except TimeoutError:
-                    break
-
-    return 0
+                listen_s = effective_listen_s(args)
+                if listen_s > 0:
+                    listen_until = asyncio.get_running_loop().time() + listen_s
+                    while True:
+                        timeout_s = listen_until - asyncio.get_running_loop().time()
+                        if timeout_s <= 0:
+                            break
+                        try:
+                            print_event(
+                                await receive_event(websocket, min(timeout_s, args.timeout_s)),
+                                raw=args.raw,
+                            )
+                        except TimeoutError:
+                            break
+            return 0
+        except Exception as exc:
+            if not should_retry(args, exc):
+                raise
+            print(
+                f"operator cli reconnecting in {max(args.reconnect_delay_s, 0.1):.1f}s: {exc}",
+                file=sys.stderr,
+            )
+            await asyncio.sleep(max(args.reconnect_delay_s, 0.1))
+            if not replay_on_retry:
+                outbound_messages = []
 
 
 def main(argv: list[str] | None = None) -> int:

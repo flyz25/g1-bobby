@@ -3,7 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from g1_bobby_operator_cli.main import build_outbound_messages, effective_listen_s, format_event
+from g1_bobby_operator_cli.main import (
+    build_outbound_messages,
+    can_retry,
+    effective_listen_s,
+    format_event,
+    should_replay_messages,
+    should_retry,
+)
 from g1_bobby_operator_cli.messages import (
     attach_token,
     demo_messages,
@@ -150,3 +157,20 @@ def test_effective_listen_s_prefers_explicit_value() -> None:
     args = argparse.Namespace(listen_s=1.25, telemetry_only=True, timeout_s=3.5)
 
     assert effective_listen_s(args) == 1.25
+
+
+def test_should_retry_requires_watch_and_retryable_error() -> None:
+    args = argparse.Namespace(watch=True)
+
+    assert can_retry(OSError("boom")) is True
+    assert should_retry(args, OSError("boom")) is True
+    assert should_retry(argparse.Namespace(watch=False), OSError("boom")) is False
+    assert should_retry(args, ValueError("boom")) is False
+
+
+def test_should_replay_messages_skips_script_and_telemetry_only() -> None:
+    assert should_replay_messages(argparse.Namespace(telemetry_only=False, script=None)) is True
+    assert should_replay_messages(
+        argparse.Namespace(telemetry_only=False, script=Path("script.jsonl"))
+    ) is False
+    assert should_replay_messages(argparse.Namespace(telemetry_only=True, script=None)) is False
