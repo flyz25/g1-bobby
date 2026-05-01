@@ -276,6 +276,11 @@ G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS=true
 `G1_BOBBY_UNITREE_COMMAND_TRANSPORT=ros2_stub` now routes through the bridge-side
 publisher stub instead of the adapter-local dry-run publisher.
 
+`G1_BOBBY_UNITREE_COMMAND_TRANSPORT=ros2_real` now exists as a fail-closed
+skeleton. It verifies `rclpy` importability and then exits with a clear
+"publisher not implemented yet" error until native ROS2 topic/action wiring is
+added.
+
 No real motor command should bypass:
 
 ```text

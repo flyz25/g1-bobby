@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from time import time
 
+import pytest
+
 from g1_bobby_contracts.commands import (
     CommandType,
     SetModeCommand,
@@ -14,6 +16,7 @@ from g1_bobby_adapters import (
     MockRobotAdapter,
     UnitreeAdapter,
     UnitreeAdapterConfig,
+    UnitreeAdapterConfigurationError,
 )
 
 
@@ -110,3 +113,32 @@ async def test_unitree_ros2_stub_transport_publishes_without_actuation(monkeypat
         assert state.pose_label == "unitree-ros2_stub"
     finally:
         await adapter.disconnect()
+
+
+async def test_unitree_ros2_real_transport_requires_rclpy(monkeypatch) -> None:
+    monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
+    adapter = UnitreeAdapter(
+        UnitreeAdapterConfig(
+            network_interface="eth0",
+            sdk_module="unitree_sdk_for_test",
+            command_transport="ros2_real",
+        ),
+    )
+
+    with pytest.raises(UnitreeAdapterConfigurationError, match="rclpy"):
+        await adapter.connect()
+
+
+async def test_unitree_ros2_real_transport_reports_unimplemented_after_rclpy(monkeypatch) -> None:
+    monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
+    monkeypatch.setitem(__import__("sys").modules, "rclpy", SimpleNamespace())
+    adapter = UnitreeAdapter(
+        UnitreeAdapterConfig(
+            network_interface="eth0",
+            sdk_module="unitree_sdk_for_test",
+            command_transport="ros2_real",
+        ),
+    )
+
+    with pytest.raises(UnitreeAdapterConfigurationError, match="not implemented yet"):
+        await adapter.connect()

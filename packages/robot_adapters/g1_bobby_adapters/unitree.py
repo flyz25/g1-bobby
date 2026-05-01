@@ -67,6 +67,9 @@ class UnitreeAdapter:
         if normalized == "ros2_stub":
             module = import_module("g1_bobby_unitree_bridge.publisher_stub")
             return module.Ros2StubUnitreeCommandPublisher()
+        if normalized == "ros2_real":
+            module = import_module("g1_bobby_unitree_bridge.publisher_ros2")
+            return module.Ros2RealUnitreeCommandPublisher()
         raise UnitreeAdapterConfigurationError(f"unsupported Unitree command transport: {transport}")
 
     async def connect(self) -> None:
@@ -84,7 +87,10 @@ class UnitreeAdapter:
                     f"Unitree SDK module '{self.config.sdk_module}' is not installed"
                 ) from exc
             raise
-        await self._publisher.connect()
+        try:
+            await self._publisher.connect()
+        except UnitreeTransportConfigurationError as exc:
+            raise UnitreeAdapterConfigurationError(str(exc)) from exc
         self._state.connected = True
         self._state.estop_engaged = False
         self._state.mode = ControlMode.IDLE
