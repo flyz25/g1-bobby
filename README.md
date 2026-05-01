@@ -120,6 +120,13 @@ g1-bobby-unitree-command-dry-run --command-json \
   '{"type":"move_velocity","seq":3,"timestamp":123.0,"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}'
 ```
 
+ROS2 bridge-side publish stub, still without DDS publish:
+
+```bash
+g1-bobby-unitree-publish-stub --command-json \
+  '{"type":"move_velocity","seq":3,"timestamp":123.0,"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}'
+```
+
 The API also exposes the latest accepted dry-run translation at:
 
 ```text
@@ -265,6 +272,9 @@ G1_BOBBY_UNITREE_SDK_MODULE=unitree_sdk2py
 G1_BOBBY_UNITREE_COMMAND_TRANSPORT=dry_run
 G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS=true
 ```
+
+`G1_BOBBY_UNITREE_COMMAND_TRANSPORT=ros2_stub` now routes through the bridge-side
+publisher stub instead of the adapter-local dry-run publisher.
 
 No real motor command should bypass:
 

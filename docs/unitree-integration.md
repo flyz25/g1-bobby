@@ -57,6 +57,7 @@ Inside that adapter boundary, the current repo now supports two transport modes:
 
 - `disabled`: fail-closed default
 - `dry_run`: publishable Unitree translation path without DDS publish or hardware actuation
+- `ros2_stub`: bridge-side publish stub without DDS publish or hardware actuation
 
 This is still not the real ROS2 or SDK transport binding. It is the software
 seam that future publisher wiring will implement.

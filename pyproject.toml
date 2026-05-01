@@ -17,6 +17,7 @@ g1-bobby-unitree-probe = "g1_bobby_unitree_bridge.main:main"
 g1-bobby-unitree-listen = "g1_bobby_unitree_bridge.listener:cli_main"
 g1-bobby-unitree-command-dry-run = "g1_bobby_unitree_bridge.command_dry_run:main"
 g1-bobby-unitree-sim = "g1_bobby_unitree_bridge.sim:main"
+g1-bobby-unitree-publish-stub = "g1_bobby_unitree_bridge.publisher_stub:main"
 
 [build-system]
 requires = ["setuptools>=75.0.0"]

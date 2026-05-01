@@ -64,6 +64,9 @@ class UnitreeAdapter:
             return DisabledUnitreeCommandPublisher()
         if normalized == "dry_run":
             return DryRunUnitreeCommandPublisher()
+        if normalized == "ros2_stub":
+            module = import_module("g1_bobby_unitree_bridge.publisher_stub")
+            return module.Ros2StubUnitreeCommandPublisher()
         raise UnitreeAdapterConfigurationError(f"unsupported Unitree command transport: {transport}")
 
     async def connect(self) -> None:

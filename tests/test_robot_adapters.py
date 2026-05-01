@@ -82,3 +82,31 @@ async def test_unitree_dry_run_transport_publishes_without_actuation(monkeypatch
         assert state.mode == ControlMode.IDLE
     finally:
         await adapter.disconnect()
+
+
+async def test_unitree_ros2_stub_transport_publishes_without_actuation(monkeypatch) -> None:
+    monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
+    adapter = UnitreeAdapter(
+        UnitreeAdapterConfig(
+            network_interface="eth0",
+            sdk_module="unitree_sdk_for_test",
+            enable_motor_commands=True,
+            command_transport="ros2_stub",
+        ),
+    )
+    await adapter.connect()
+    try:
+        await adapter.execute(
+            SetModeCommand(
+                type=CommandType.SET_MODE,
+                seq=1,
+                timestamp=time(),
+                payload=SetModePayload(mode="manual"),
+            )
+        )
+        state = await adapter.get_state()
+        assert state.connected is True
+        assert state.mode == ControlMode.MANUAL
+        assert state.pose_label == "unitree-ros2_stub"
+    finally:
+        await adapter.disconnect()
