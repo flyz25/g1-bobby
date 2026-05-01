@@ -281,6 +281,15 @@ skeleton. It verifies `rclpy` importability and then exits with a clear
 "publisher not implemented yet" error until native ROS2 topic/action wiring is
 added.
 
+That ROS2 skeleton is now narrowed to the current confirmed G1 intents:
+
+- `set_mode` -> `/api/sport/request` (`unitree_api/msg/Request`)
+- `move_velocity` / `stop` -> `/lowcmd` (`LowCmd`)
+
+Those bindings are still fail-closed. They document the current best-known
+target surfaces from official Unitree material, but no live ROS2 publish occurs
+yet.
+
 `G1_BOBBY_UNITREE_COMMAND_TRANSPORT=sdk_real` now exists as a fail-closed
 Unitree SDK/DDS skeleton. It verifies `unitree_sdk2py` importability and then
 exits with a clear DDS wiring error until native G1 command topic/service

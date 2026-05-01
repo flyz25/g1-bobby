@@ -64,6 +64,16 @@ Inside that adapter boundary, the current repo now supports two transport modes:
 This is still not the real ROS2 or SDK transport binding. It is the software
 seam that future publisher wiring will implement.
 
+Current confirmed ROS2 binding intents in the repo are:
+
+- `set_mode` -> `/api/sport/request` with `unitree_api/msg/Request`
+- `move_velocity` -> `/lowcmd` with `LowCmd`
+- `stop` -> `/lowcmd` with `LowCmd`
+
+These are still audit-grade binding targets only. `heartbeat` and `estop` do
+not yet have a confirmed ROS2 publish surface in this repo, so `ros2_real`
+continues to fail closed for them.
+
 ## Docker ROS2/Unitree Environment
 
 Use the dedicated container instead of installing ROS2 Humble natively on WSL
