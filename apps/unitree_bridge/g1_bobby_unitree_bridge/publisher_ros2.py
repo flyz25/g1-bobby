@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from importlib import import_module
+from typing import Any
 
 from g1_bobby_adapters.unitree_transport import UnitreeTransportConfigurationError
 from g1_bobby_contracts import CommandEnvelope, CommandType, UnitreeCommandPlanRecord
@@ -13,6 +14,16 @@ class Ros2BindingIntent:
     topic: str
     msg_type: str
     binding_mode: str
+    note: str
+
+
+@dataclass(frozen=True)
+class Ros2PublishPlan:
+    command_type: str
+    topic: str
+    msg_type: str
+    binding_mode: str
+    payload: dict[str, Any]
     note: str
 
 
@@ -33,6 +44,63 @@ def resolve_ros2_binding(command: CommandEnvelope) -> Ros2BindingIntent | None:
             binding_mode="low_level_motor",
             note="Official unitree_ros2 README maps motor control to /lowcmd; exact package differs by robot family and G1 example path is g1/lowlevel/g1_low_level_example",
         )
+    return None
+
+
+def build_ros2_publish_plan(command: CommandEnvelope) -> Ros2PublishPlan | None:
+    binding = resolve_ros2_binding(command)
+    if binding is None:
+        return None
+
+    if command.type == CommandType.SET_MODE:
+        return Ros2PublishPlan(
+            command_type=str(command.type),
+            topic=binding.topic,
+            msg_type=binding.msg_type,
+            binding_mode=binding.binding_mode,
+            payload={
+                "api_id": "switch_mode",
+                "parameter": {"mode": command.payload.mode},
+            },
+            note=binding.note,
+        )
+
+    if command.type == CommandType.MOVE_VELOCITY:
+        return Ros2PublishPlan(
+            command_type=str(command.type),
+            topic=binding.topic,
+            msg_type=binding.msg_type,
+            binding_mode=binding.binding_mode,
+            payload={
+                "mode": "velocity",
+                "velocity": {
+                    "linear_x": command.payload.linear_x,
+                    "linear_y": command.payload.linear_y,
+                    "angular_z": command.payload.angular_z,
+                },
+                "duration_ms": command.payload.duration_ms,
+            },
+            note=binding.note,
+        )
+
+    if command.type == CommandType.STOP:
+        return Ros2PublishPlan(
+            command_type=str(command.type),
+            topic=binding.topic,
+            msg_type=binding.msg_type,
+            binding_mode=binding.binding_mode,
+            payload={
+                "mode": "velocity",
+                "velocity": {
+                    "linear_x": 0.0,
+                    "linear_y": 0.0,
+                    "angular_z": 0.0,
+                },
+                "reason": command.payload.reason,
+            },
+            note=binding.note,
+        )
+
     return None
 
 
@@ -62,12 +130,12 @@ class Ros2RealUnitreeCommandPublisher:
         self._connected = False
 
     async def publish(self, command: CommandEnvelope) -> UnitreeCommandPlanRecord:
-        binding = resolve_ros2_binding(command)
-        if binding is None:
+        plan = build_ros2_publish_plan(command)
+        if plan is None:
             raise UnitreeTransportConfigurationError(
                 f"ROS2 real publisher has no confirmed binding yet for command type: {command.type}"
             )
         raise UnitreeTransportConfigurationError(
             "ROS2 real publisher binding is identified but not implemented yet: "
-            f"{binding.command_type} -> {binding.topic} ({binding.msg_type})"
+            f"{plan.command_type} -> {plan.topic} ({plan.msg_type}) payload={asdict(plan)['payload']}"
         )

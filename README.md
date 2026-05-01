@@ -290,6 +290,10 @@ Those bindings are still fail-closed. They document the current best-known
 target surfaces from official Unitree material, but no live ROS2 publish occurs
 yet.
 
+The repo now also builds a concrete ROS2 publish-plan skeleton for those
+bindings, so the remaining gap is runtime publisher wiring rather than command
+shape discovery.
+
 `G1_BOBBY_UNITREE_COMMAND_TRANSPORT=sdk_real` now exists as a fail-closed
 Unitree SDK/DDS skeleton. It verifies `unitree_sdk2py` importability and then
 exits with a clear DDS wiring error until native G1 command topic/service
@@ -303,6 +307,9 @@ That SDK/DDS skeleton is now narrowed to the current confirmed G1 intents:
 These bindings are still fail-closed. They track the current best-known
 high-level and low-level SDK surfaces from official Unitree SDK material, but no
 live DDS command publish occurs yet.
+
+The repo now also builds a concrete SDK publish-plan skeleton for those
+bindings, so the remaining gap is native DDS client/publisher execution.
 
 No real motor command should bypass:
 

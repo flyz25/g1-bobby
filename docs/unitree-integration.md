@@ -74,6 +74,9 @@ These are still audit-grade binding targets only. `heartbeat` and `estop` do
 not yet have a confirmed ROS2 publish surface in this repo, so `ros2_real`
 continues to fail closed for them.
 
+The current repo also builds a concrete ROS2 publish-plan skeleton for these
+commands, but it does not execute any live ROS2 publish yet.
+
 Current confirmed Unitree SDK/DDS binding intents in the repo are:
 
 - `set_mode` -> `SportClient/basic service request`
@@ -83,6 +86,9 @@ Current confirmed Unitree SDK/DDS binding intents in the repo are:
 These are still audit-grade SDK binding targets only. `heartbeat` and `estop`
 do not yet have a confirmed DDS publish surface in this repo, so `sdk_real`
 continues to fail closed for them.
+
+The current repo also builds a concrete SDK publish-plan skeleton for these
+commands, but it does not execute any live DDS publish yet.
 
 ## Docker ROS2/Unitree Environment
 

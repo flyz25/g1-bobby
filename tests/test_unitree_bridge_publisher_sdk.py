@@ -14,6 +14,7 @@ from g1_bobby_contracts.commands import (
 )
 from g1_bobby_unitree_bridge.publisher_sdk import (
     SdkRealUnitreeCommandPublisher,
+    build_sdk_publish_plan,
     resolve_sdk_binding,
 )
 
@@ -82,13 +83,70 @@ def test_resolve_sdk_binding_returns_none_for_heartbeat() -> None:
     assert binding is None
 
 
+def test_build_sdk_publish_plan_maps_set_mode_payload() -> None:
+    plan = build_sdk_publish_plan(
+        SetModeCommand(
+            type=CommandType.SET_MODE,
+            seq=1,
+            timestamp=123.0,
+            payload=SetModePayload(mode="manual"),
+        )
+    )
+
+    assert plan is not None
+    assert plan.binding_target == "SportClient/basic service request"
+    assert plan.payload == {
+        "client": "SportClient",
+        "operation": "switch_mode",
+        "parameter": {"mode": "manual"},
+    }
+
+
+def test_build_sdk_publish_plan_maps_velocity_payload() -> None:
+    plan = build_sdk_publish_plan(
+        MoveVelocityCommand(
+            type=CommandType.MOVE_VELOCITY,
+            seq=3,
+            timestamp=123.0,
+            payload=MoveVelocityPayload(
+                linear_x=0.1,
+                linear_y=0.0,
+                angular_z=0.2,
+                duration_ms=100,
+            ),
+        )
+    )
+
+    assert plan is not None
+    assert plan.binding_target == "rt/lowcmd (unitree_hg.msg.dds_.LowCmd_)"
+    assert plan.payload == {
+        "mode_pr": 0,
+        "mode_machine": "low_level",
+        "velocity": {"linear_x": 0.1, "linear_y": 0.0, "angular_z": 0.2},
+        "duration_ms": 100,
+    }
+
+
+def test_build_sdk_publish_plan_returns_none_for_heartbeat() -> None:
+    plan = build_sdk_publish_plan(
+        HeartbeatCommand(
+            type=CommandType.HEARTBEAT,
+            seq=5,
+            timestamp=123.0,
+            payload=HeartbeatPayload(client_id="test-client"),
+        )
+    )
+
+    assert plan is None
+
+
 @pytest.mark.asyncio
 async def test_sdk_real_publisher_reports_bound_target_for_move_velocity() -> None:
     publisher = SdkRealUnitreeCommandPublisher(network_interface="eth0")
 
     with pytest.raises(
         UnitreeTransportConfigurationError,
-        match=r"rt/lowcmd \(unitree_hg\.msg\.dds_\.LowCmd_\) \[publish_subscribe\]",
+        match=r"rt/lowcmd \(unitree_hg\.msg\.dds_\.LowCmd_\) \[publish_subscribe\].*duration_ms': 100",
     ):
         await publisher.publish(
             MoveVelocityCommand(
@@ -111,7 +169,7 @@ async def test_sdk_real_publisher_reports_bound_target_for_set_mode() -> None:
 
     with pytest.raises(
         UnitreeTransportConfigurationError,
-        match=r"SportClient/basic service request \[request_response\]",
+        match=r"SportClient/basic service request \[request_response\].*switch_mode",
     ):
         await publisher.publish(
             SetModeCommand(
