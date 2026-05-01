@@ -83,6 +83,29 @@ def _format_unitree_suffix(event: dict[str, Any]) -> str:
     return f" [{' '.join(details)}]" if details else ""
 
 
+def _format_unitree_command_plan_suffix(event: dict[str, Any]) -> str:
+    record = event.get("unitree_command_plan")
+    if not isinstance(record, dict):
+        return ""
+    plan = record.get("plan")
+    if not isinstance(plan, dict):
+        return ""
+    details: list[str] = []
+    action = plan.get("action")
+    if isinstance(action, str):
+        details.append(f"action={action}")
+    target = plan.get("unitree_target")
+    if isinstance(target, str):
+        details.append(f"target={target}")
+    source = record.get("source")
+    if isinstance(source, str):
+        details.append(f"source={source}")
+    stale = record.get("stale")
+    if isinstance(stale, bool) and stale:
+        details.append("stale=true")
+    return f" [{' '.join(details)}]" if details else ""
+
+
 def format_event(raw_text: str, raw: bool = False) -> str:
     if raw:
         return raw_text
@@ -123,6 +146,7 @@ def format_event(raw_text: str, raw: bool = False) -> str:
             f"seq={event.get('seq')} "
             f"command={event.get('command_type')} "
             f"message={event.get('message')}"
+            f"{_format_unitree_command_plan_suffix(event)}"
         )
     if event_type == "reject":
         return (

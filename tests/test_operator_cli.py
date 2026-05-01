@@ -107,8 +107,15 @@ def test_format_event_summarizes_telemetry() -> None:
 
 
 def test_format_event_summarizes_ack_and_reject() -> None:
-    assert format_event('{"type":"ack","seq":7,"command_type":"move_velocity","message":"accepted"}') == (
-        "ack seq=7 command=move_velocity message=accepted"
+    assert format_event(
+        '{"type":"ack","seq":7,"command_type":"move_velocity","message":"accepted",'
+        '"unitree_command_plan":{"recorded_at":123.0,"source":"restored","stale":true,'
+        '"plan":{"seq":7,"type":"move_velocity","transport":"dry_run",'
+        '"action":"motion.velocity","unitree_target":"base_velocity",'
+        '"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}}}'
+    ) == (
+        "ack seq=7 command=move_velocity message=accepted "
+        "[action=motion.velocity target=base_velocity source=restored stale=true]"
     )
     assert format_event('{"type":"reject","seq":8,"code":"safety_rejected","reason":"operator heartbeat is stale"}') == (
         "reject seq=8 code=safety_rejected reason=operator heartbeat is stale"

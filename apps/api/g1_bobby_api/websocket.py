@@ -136,9 +136,16 @@ async def operator_socket(websocket: WebSocket) -> None:
                 )
                 continue
 
-            await runtime.record_unitree_command_plan(command)
+            unitree_command_plan = await runtime.record_unitree_command_plan(command)
             runtime.record_accepted_command()
-            await send_event(websocket, AckEvent(seq=command.seq, command_type=str(command.type)))
+            await send_event(
+                websocket,
+                AckEvent(
+                    seq=command.seq,
+                    command_type=str(command.type),
+                    unitree_command_plan=unitree_command_plan,
+                ),
+            )
     except WebSocketDisconnect:
         pass
     finally:

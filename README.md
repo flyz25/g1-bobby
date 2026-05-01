@@ -82,6 +82,9 @@ Persistent monitor mode with automatic reconnect:
 g1-bobby-operator --url ws://127.0.0.1:8010/ws/operator --telemetry-only --watch
 ```
 
+Accepted `ack` events now also carry `unitree_command_plan`, so the CLI can show
+the dry-run Unitree translation inline with each accepted operator command.
+
 ## Unitree ROS2 Container
 
 The robot stack runs in a separate Ubuntu 22.04 / ROS2 Humble container so WSL

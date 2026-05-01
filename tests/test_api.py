@@ -234,7 +234,11 @@ def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
                     "payload": {"client_id": "quest-dev"},
                 }
             )
-            assert websocket.receive_json()["type"] == "ack"
+            heartbeat_ack = websocket.receive_json()
+            assert heartbeat_ack["type"] == "ack"
+            assert heartbeat_ack["unitree_command_plan"]["source"] == "live"
+            assert heartbeat_ack["unitree_command_plan"]["stale"] is False
+            assert heartbeat_ack["unitree_command_plan"]["plan"]["action"] == "bridge.keepalive"
 
             websocket.send_json(
                 {
@@ -244,7 +248,9 @@ def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
                     "payload": {"mode": "manual"},
                 }
             )
-            assert websocket.receive_json()["type"] == "ack"
+            mode_ack = websocket.receive_json()
+            assert mode_ack["type"] == "ack"
+            assert mode_ack["unitree_command_plan"]["plan"]["action"] == "bridge.set_mode"
 
             websocket.send_json(
                 {
@@ -262,6 +268,10 @@ def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
             event = websocket.receive_json()
             assert event["type"] == "ack"
             assert event["seq"] == 3
+            assert event["unitree_command_plan"]["plan"]["action"] == "motion.velocity"
+            assert event["unitree_command_plan"]["plan"]["unitree_target"] == "base_velocity"
+            assert event["unitree_command_plan"]["source"] == "live"
+            assert event["unitree_command_plan"]["stale"] is False
 
         plan = client.get("/unitree/command-plan")
         assert plan.status_code == 200

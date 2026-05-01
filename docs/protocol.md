@@ -147,3 +147,13 @@ When the API has cached a Unitree DDS snapshot, both events also include an
 optional `unitree_state` object with the latest simulator or robot read-only
 state summary, and their `state.pose_label` reflects a read-only Unitree pose
 projection.
+
+### `ack`
+
+Accepted command acknowledgements may also include `unitree_command_plan`, which
+contains the dry-run Unitree translation record for that accepted command:
+
+- `recorded_at`
+- `source=live|restored`
+- `stale=true|false`
+- `plan` with the translated Unitree action payload

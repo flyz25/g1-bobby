@@ -6,6 +6,7 @@ from typing import Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from .state import RobotState
+from .unitree_command import UnitreeCommandPlanRecord
 from .unitree import UnitreeDdsSnapshot
 
 
@@ -34,6 +35,7 @@ class AckEvent(BaseModel):
     seq: int | None = None
     command_type: str
     message: str = "accepted"
+    unitree_command_plan: UnitreeCommandPlanRecord | None = None
 
 
 class RejectEvent(BaseModel):
