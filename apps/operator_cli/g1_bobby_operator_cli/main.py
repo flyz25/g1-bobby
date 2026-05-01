@@ -92,6 +92,13 @@ async def receive_event(websocket, timeout_s: float) -> str:
     return await asyncio.wait_for(websocket.recv(), timeout=timeout_s)
 
 
+def _truncate_detail(value: str, *, limit: int = 48) -> str:
+    normalized = " ".join(value.split())
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 3] + "..."
+
+
 def _format_unitree_suffix(event: dict[str, Any]) -> str:
     unitree_state = event.get("unitree_state")
     if not isinstance(unitree_state, dict):
@@ -184,6 +191,9 @@ def _format_unitree_execution_result_suffix(event: dict[str, Any]) -> str:
     target = execution_result.get("target")
     if isinstance(target, str):
         details.append(f"target={target}")
+    detail = execution_result.get("detail")
+    if isinstance(detail, str) and detail:
+        details.append(f"detail={_truncate_detail(detail)}")
     return f" [{' '.join(details)}]" if details else ""
 
 

@@ -147,7 +147,7 @@ def test_format_event_summarizes_ack_and_reject() -> None:
         "ack seq=7 command=move_velocity message=accepted "
         "[id=11 action=motion.velocity target=base_velocity source=restored stale=true]"
         " [exec_id=12 transport=ros2_plan_stub exec_target=/lowcmd]"
-        " [result_id=13 status=stub_emitted transport=ros2_plan_stub target=/lowcmd]"
+        " [result_id=13 status=stub_emitted transport=ros2_plan_stub target=/lowcmd detail=d]"
     )
     assert format_event(
         '{"type":"reject","seq":8,"code":"execution_failed","reason":"transport disabled",'
@@ -156,7 +156,7 @@ def test_format_event_summarizes_ack_and_reject() -> None:
         '"target":"disabled","detail":"transport disabled"}}}'
     ) == (
         "reject seq=8 code=execution_failed reason=transport disabled "
-        "[result_id=14 status=blocked transport=disabled target=disabled]"
+        "[result_id=14 status=blocked transport=disabled target=disabled detail=transport disabled]"
     )
 
 
