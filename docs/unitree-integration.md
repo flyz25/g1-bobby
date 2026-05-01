@@ -193,6 +193,12 @@ Served `unitree_state` payloads include:
 - `source=restored` for snapshots loaded from cache during API startup
 - `stale=true` when `timestamp_s` is older than `G1_BOBBY_UNITREE_STATE_TTL_S`
 
+Served command-plan records include the same metadata surface:
+
+- `source=live` for plans accepted in the current API process
+- `source=restored` for plans reloaded from command-plan cache during startup
+- `stale=true` when `recorded_at` is older than `G1_BOBBY_UNITREE_COMMAND_PLAN_TTL_S`
+
 Override the scene when needed:
 
 ```bash

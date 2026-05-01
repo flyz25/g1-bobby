@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -245,16 +246,20 @@ async def test_runtime_records_unitree_command_plan(tmp_path: Path) -> None:
 
     try:
         plan = await runtime.record_unitree_command_plan(command)
-        assert plan.action == "motion.velocity"
+        assert plan.plan.action == "motion.velocity"
+        assert plan.source == "live"
+        assert plan.stale is False
 
         last_plan = await runtime.get_last_unitree_command_plan()
         assert last_plan is not None
-        assert last_plan.seq == 3
+        assert last_plan.plan.seq == 3
         status = await runtime.unitree_command_plan_status()
         assert status["available"] is True
         assert status["plans"] == 1
         assert status["retained"] == 1
         assert status["history_size"] == 10
+        assert status["source"] == "live"
+        assert status["stale"] is False
     finally:
         await runtime.adapter.disconnect()
 
@@ -282,7 +287,7 @@ async def test_runtime_trims_unitree_command_plan_history(tmp_path: Path) -> Non
             await runtime.record_unitree_command_plan(command)
 
         history = await runtime.get_unitree_command_plan_history()
-        assert [plan.seq for plan in history] == [2, 3]
+        assert [record.plan.seq for record in history] == [2, 3]
         status = await runtime.unitree_command_plan_status()
         assert status["plans"] == 3
         assert status["retained"] == 2
@@ -322,16 +327,66 @@ async def test_runtime_persists_and_reloads_unitree_command_plan_history(tmp_pat
     reloaded = await Runtime.create(settings)
     try:
         history = await reloaded.get_unitree_command_plan_history()
-        assert [plan.seq for plan in history] == [2, 3]
+        assert [record.plan.seq for record in history] == [2, 3]
+        assert all(record.source == "restored" for record in history)
         last_plan = await reloaded.get_last_unitree_command_plan()
         assert last_plan is not None
-        assert last_plan.seq == 3
+        assert last_plan.plan.seq == 3
+        assert last_plan.source == "restored"
+        assert last_plan.stale is False
         status = await reloaded.unitree_command_plan_status()
         assert status["available"] is True
         assert status["plans"] == 2
         assert status["retained"] == 2
         assert status["history_size"] == 2
         assert status["last_recorded_at"] is not None
+        assert status["source"] == "restored"
+        assert status["stale"] is False
+    finally:
+        await reloaded.adapter.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_runtime_restored_unitree_command_plan_can_be_marked_stale(tmp_path: Path) -> None:
+    settings = build_settings(
+        tmp_path,
+        unitree_command_plan_history_size=2,
+        unitree_command_plan_ttl_s=0.01,
+    )
+    runtime = await Runtime.create(settings)
+
+    try:
+        await runtime.record_unitree_command_plan(
+            MoveVelocityCommand(
+                type=CommandType.MOVE_VELOCITY,
+                seq=1,
+                timestamp=123.0,
+                payload=MoveVelocityPayload(
+                    linear_x=0.1,
+                    linear_y=0.0,
+                    angular_z=0.0,
+                    duration_ms=100,
+                ),
+            )
+        )
+    finally:
+        await runtime.adapter.disconnect()
+
+    cache_path = settings.unitree_command_plan_cache_path
+    cache_lines = cache_path.read_text(encoding="utf-8").splitlines()
+    payload = json.loads(cache_lines[-1])
+    payload["recorded_at"] = payload["recorded_at"] - 5.0
+    cache_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    reloaded = await Runtime.create(settings)
+    try:
+        last_plan = await reloaded.get_last_unitree_command_plan()
+        assert last_plan is not None
+        assert last_plan.source == "restored"
+        assert last_plan.stale is True
+        status = await reloaded.unitree_command_plan_status()
+        assert status["source"] == "restored"
+        assert status["stale"] is True
     finally:
         await reloaded.adapter.disconnect()
 

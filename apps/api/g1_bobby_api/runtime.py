@@ -12,6 +12,7 @@ from g1_bobby_contracts import (
     CommandEnvelope,
     RobotState,
     UnitreeCommandPlan,
+    UnitreeCommandPlanRecord,
     UnitreeDdsSnapshot,
     translate_unitree_command,
 )
@@ -39,9 +40,11 @@ class Runtime:
         default_factory=lambda: Path(".runtime/unitree_command_plans.jsonl")
     )
     unitree_state_ttl_s: float = 2.0
+    unitree_command_plan_ttl_s: float = 10.0
     _unitree_state: UnitreeDdsSnapshot | None = field(default=None, init=False, repr=False)
-    _last_unitree_command_plan: UnitreeCommandPlan | None = field(default=None, init=False, repr=False)
-    _unitree_command_plan_history: list[UnitreeCommandPlan] = field(default_factory=list, init=False, repr=False)
+    _last_unitree_command_plan: UnitreeCommandPlanRecord | None = field(default=None, init=False, repr=False)
+    _unitree_command_plan_history: list[UnitreeCommandPlanRecord] = field(default_factory=list, init=False, repr=False)
+    _unitree_command_plan_restored: bool = field(default=False, init=False, repr=False)
     _unitree_state_restored: bool = field(default=False, init=False, repr=False)
     _operator_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _unitree_state_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
@@ -62,6 +65,7 @@ class Runtime:
             unitree_state_cache_path=resolved_settings.unitree_state_cache_path,
             unitree_command_plan_cache_path=resolved_settings.unitree_command_plan_cache_path,
             unitree_state_ttl_s=resolved_settings.unitree_state_ttl_s,
+            unitree_command_plan_ttl_s=resolved_settings.unitree_command_plan_ttl_s,
             unitree_command_plan_history_size=resolved_settings.unitree_command_plan_history_size,
         )
         await runtime.load_persisted_unitree_state()
@@ -128,14 +132,20 @@ class Runtime:
         payload = "\n".join(
             json.dumps(
                 {
-                    "recorded_at": self.unitree_command_plan_recorded_at if index == len(self._unitree_command_plan_history) - 1 else None,
-                    "plan": plan.model_dump(mode="json"),
+                    "recorded_at": record.recorded_at,
+                    "plan": record.plan.model_dump(mode="json"),
                 }
             )
-            for index, plan in enumerate(self._unitree_command_plan_history)
+            for record in self._unitree_command_plan_history
         )
         tmp_path.write_text(f"{payload}\n" if payload else "", encoding="utf-8")
         tmp_path.replace(self.unitree_command_plan_cache_path)
+
+    def _decorate_unitree_command_plan_record(self, record: UnitreeCommandPlanRecord) -> UnitreeCommandPlanRecord:
+        decorated = record.model_copy(deep=True)
+        decorated.source = "restored" if self._unitree_command_plan_restored else "live"
+        decorated.stale = (time() - decorated.recorded_at) > self.unitree_command_plan_ttl_s
+        return decorated
 
     async def record_unitree_state(self, snapshot: UnitreeDdsSnapshot) -> None:
         async with self._unitree_state_lock:
@@ -166,16 +176,18 @@ class Runtime:
         if not self.unitree_command_plan_cache_path.exists():
             return False
 
-        entries: list[tuple[UnitreeCommandPlan, float | None]] = []
+        entries: list[UnitreeCommandPlanRecord] = []
         try:
             for raw_line in self.unitree_command_plan_cache_path.read_text(encoding="utf-8").splitlines():
                 if not raw_line.strip():
                     continue
                 payload = json.loads(raw_line)
                 entries.append(
-                    (
-                        UnitreeCommandPlan.model_validate(payload["plan"]),
-                        payload.get("recorded_at"),
+                    UnitreeCommandPlanRecord(
+                        recorded_at=float(payload["recorded_at"]),
+                        source="restored",
+                        stale=False,
+                        plan=UnitreeCommandPlan.model_validate(payload["plan"]),
                     )
                 )
         except (OSError, ValidationError, json.JSONDecodeError, KeyError, TypeError):
@@ -186,10 +198,11 @@ class Runtime:
 
         retained = entries[-self.unitree_command_plan_history_size :]
         async with self._unitree_command_plan_lock:
-            self._unitree_command_plan_history = [plan for plan, _ in retained]
+            self._unitree_command_plan_history = retained
             self._last_unitree_command_plan = self._unitree_command_plan_history[-1]
+            self._unitree_command_plan_restored = True
             self.unitree_command_plans = len(self._unitree_command_plan_history)
-            self.unitree_command_plan_recorded_at = retained[-1][1]
+            self.unitree_command_plan_recorded_at = retained[-1].recorded_at
         return True
 
     async def get_unitree_state(self) -> UnitreeDdsSnapshot | None:
@@ -200,36 +213,54 @@ class Runtime:
         state = await self.adapter.get_state()
         return self._project_state(state, await self.get_unitree_state())
 
-    async def record_unitree_command_plan(self, command: CommandEnvelope) -> UnitreeCommandPlan:
+    async def record_unitree_command_plan(self, command: CommandEnvelope) -> UnitreeCommandPlanRecord:
         plan = translate_unitree_command(command)
+        record = UnitreeCommandPlanRecord(
+            recorded_at=time(),
+            source="live",
+            stale=False,
+            plan=plan,
+        )
         async with self._unitree_command_plan_lock:
-            self._last_unitree_command_plan = plan
-            self._unitree_command_plan_history.append(plan)
+            self._last_unitree_command_plan = record
+            self._unitree_command_plan_history.append(record)
+            self._unitree_command_plan_restored = False
             if len(self._unitree_command_plan_history) > self.unitree_command_plan_history_size:
                 self._unitree_command_plan_history = self._unitree_command_plan_history[
                     -self.unitree_command_plan_history_size :
                 ]
             self.unitree_command_plans += 1
-            self.unitree_command_plan_recorded_at = time()
+            self.unitree_command_plan_recorded_at = record.recorded_at
             self._persist_unitree_command_plan_history()
-        return plan
+        return self._decorate_unitree_command_plan_record(record)
 
-    async def get_last_unitree_command_plan(self) -> UnitreeCommandPlan | None:
+    async def get_last_unitree_command_plan(self) -> UnitreeCommandPlanRecord | None:
         async with self._unitree_command_plan_lock:
-            return self._last_unitree_command_plan.model_copy(deep=True) if self._last_unitree_command_plan else None
+            return (
+                self._decorate_unitree_command_plan_record(self._last_unitree_command_plan)
+                if self._last_unitree_command_plan
+                else None
+            )
 
-    async def get_unitree_command_plan_history(self) -> list[UnitreeCommandPlan]:
+    async def get_unitree_command_plan_history(self) -> list[UnitreeCommandPlanRecord]:
         async with self._unitree_command_plan_lock:
-            return [plan.model_copy(deep=True) for plan in self._unitree_command_plan_history]
+            return [self._decorate_unitree_command_plan_record(record) for record in self._unitree_command_plan_history]
 
     async def unitree_command_plan_status(self) -> dict[str, object]:
         async with self._unitree_command_plan_lock:
+            last = (
+                self._decorate_unitree_command_plan_record(self._last_unitree_command_plan)
+                if self._last_unitree_command_plan
+                else None
+            )
             return {
                 "plans": self.unitree_command_plans,
                 "last_recorded_at": self.unitree_command_plan_recorded_at,
                 "available": self._last_unitree_command_plan is not None,
                 "retained": len(self._unitree_command_plan_history),
                 "history_size": self.unitree_command_plan_history_size,
+                "source": last.source if last else None,
+                "stale": last.stale if last else None,
             }
 
     async def unitree_state_status(self) -> dict[str, object]:

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from time import time
 
@@ -113,6 +114,8 @@ def test_unitree_state_ingest_and_readback(tmp_path: Path) -> None:
         runtime = client.get("/runtime")
         assert runtime.json()["unitree_state"]["updates"] == 1
         assert runtime.json()["unitree_command_plan"]["available"] is False
+        assert runtime.json()["unitree_command_plan"]["source"] is None
+        assert runtime.json()["unitree_command_plan"]["stale"] is None
 
 
 def test_websocket_rejects_invalid_token(tmp_path: Path) -> None:
@@ -262,18 +265,22 @@ def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
 
         plan = client.get("/unitree/command-plan")
         assert plan.status_code == 200
-        assert plan.json()["action"] == "motion.velocity"
-        assert plan.json()["payload"]["angular_z"] == 0.0
+        assert plan.json()["source"] == "live"
+        assert plan.json()["stale"] is False
+        assert plan.json()["plan"]["action"] == "motion.velocity"
+        assert plan.json()["plan"]["payload"]["angular_z"] == 0.0
 
         runtime = client.get("/runtime")
         assert runtime.json()["unitree_command_plan"]["available"] is True
         assert runtime.json()["unitree_command_plan"]["plans"] == 3
         assert runtime.json()["unitree_command_plan"]["retained"] == 3
         assert runtime.json()["unitree_command_plan"]["history_size"] == 10
+        assert runtime.json()["unitree_command_plan"]["source"] == "live"
+        assert runtime.json()["unitree_command_plan"]["stale"] is False
 
         history = client.get("/unitree/command-plans")
         assert history.status_code == 200
-        assert [plan["action"] for plan in history.json()] == [
+        assert [record["plan"]["action"] for record in history.json()] == [
             "bridge.keepalive",
             "bridge.set_mode",
             "motion.velocity",
@@ -332,12 +339,15 @@ def test_unitree_command_plan_history_is_trimmed(tmp_path: Path) -> None:
 
         history = client.get("/unitree/command-plans")
         assert history.status_code == 200
-        assert [plan["seq"] for plan in history.json()] == [2, 3]
+        assert [record["plan"]["seq"] for record in history.json()] == [2, 3]
+        assert all(record["source"] == "live" for record in history.json())
 
         runtime = client.get("/runtime")
         assert runtime.json()["unitree_command_plan"]["plans"] == 3
         assert runtime.json()["unitree_command_plan"]["retained"] == 2
         assert runtime.json()["unitree_command_plan"]["history_size"] == 2
+        assert runtime.json()["unitree_command_plan"]["source"] == "live"
+        assert runtime.json()["unitree_command_plan"]["stale"] is False
 
 
 def test_unitree_command_plan_history_is_restored_after_app_restart(tmp_path: Path) -> None:
@@ -373,11 +383,14 @@ def test_unitree_command_plan_history_is_restored_after_app_restart(tmp_path: Pa
     with TestClient(create_app(settings)) as restarted_client:
         plan = restarted_client.get("/unitree/command-plan")
         assert plan.status_code == 200
-        assert plan.json()["seq"] == 3
+        assert plan.json()["plan"]["seq"] == 3
+        assert plan.json()["source"] == "restored"
+        assert plan.json()["stale"] is False
 
         history = restarted_client.get("/unitree/command-plans")
         assert history.status_code == 200
-        assert [item["seq"] for item in history.json()] == [2, 3]
+        assert [item["plan"]["seq"] for item in history.json()] == [2, 3]
+        assert all(item["source"] == "restored" for item in history.json())
 
         runtime = restarted_client.get("/runtime")
         assert runtime.json()["unitree_command_plan"]["available"] is True
@@ -385,6 +398,43 @@ def test_unitree_command_plan_history_is_restored_after_app_restart(tmp_path: Pa
         assert runtime.json()["unitree_command_plan"]["retained"] == 2
         assert runtime.json()["unitree_command_plan"]["history_size"] == 2
         assert runtime.json()["unitree_command_plan"]["last_recorded_at"] is not None
+        assert runtime.json()["unitree_command_plan"]["source"] == "restored"
+        assert runtime.json()["unitree_command_plan"]["stale"] is False
+
+
+def test_restored_unitree_command_plan_can_be_marked_stale(tmp_path: Path) -> None:
+    settings = build_settings(
+        tmp_path,
+        unitree_command_plan_history_size=2,
+        unitree_command_plan_ttl_s=0.01,
+    )
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/operator?token=dev-operator-token") as websocket:
+            assert websocket.receive_json()["type"] == "state"
+            websocket.send_json(
+                {
+                    "type": "heartbeat",
+                    "seq": 1,
+                    "timestamp": time(),
+                    "payload": {"client_id": "quest-dev"},
+                }
+            )
+            assert websocket.receive_json()["type"] == "ack"
+
+    payload = settings.unitree_command_plan_cache_path.read_text(encoding="utf-8").splitlines()
+    entry = json.loads(payload[-1])
+    entry["recorded_at"] -= 5.0
+    settings.unitree_command_plan_cache_path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+
+    with TestClient(create_app(settings)) as restarted_client:
+        plan = restarted_client.get("/unitree/command-plan")
+        assert plan.status_code == 200
+        assert plan.json()["source"] == "restored"
+        assert plan.json()["stale"] is True
+
+        runtime = restarted_client.get("/runtime")
+        assert runtime.json()["unitree_command_plan"]["source"] == "restored"
+        assert runtime.json()["unitree_command_plan"]["stale"] is True
 
 
 def test_websocket_rejects_replayed_sequence(tmp_path: Path) -> None:

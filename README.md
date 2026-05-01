@@ -175,6 +175,13 @@ source=live|restored
 stale=true|false
 ```
 
+Served command-plan records also include:
+
+```text
+source=live|restored
+stale=true|false
+```
+
 WSLg should provide `DISPLAY`, `WAYLAND_DISPLAY`, and `/mnt/wslg`. RTX GPU
 acceleration is more relevant for the heavier IsaacLab path; MuJoCo is the
 baseline simulator for local integration.

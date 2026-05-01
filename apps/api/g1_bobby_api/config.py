@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     unitree_state_cache_path: Path = Path(".runtime/unitree_state.json")
     unitree_command_plan_cache_path: Path = Path(".runtime/unitree_command_plans.jsonl")
     unitree_state_ttl_s: float = Field(default=2.0, gt=0.0)
+    unitree_command_plan_ttl_s: float = Field(default=10.0, gt=0.0)
     unitree_command_plan_history_size: int = Field(default=10, gt=0)
 
     safety_max_linear_mps: float = Field(default=0.35, gt=0.0)

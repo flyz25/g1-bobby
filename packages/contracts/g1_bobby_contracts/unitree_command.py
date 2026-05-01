@@ -18,6 +18,15 @@ class UnitreeCommandPlan(BaseModel):
     payload: dict[str, Any]
 
 
+class UnitreeCommandPlanRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recorded_at: float
+    source: str
+    stale: bool = False
+    plan: UnitreeCommandPlan
+
+
 def translate_unitree_command(command: CommandEnvelope) -> UnitreeCommandPlan:
     if command.type == CommandType.HEARTBEAT:
         return UnitreeCommandPlan(
