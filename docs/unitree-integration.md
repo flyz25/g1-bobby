@@ -113,6 +113,15 @@ docker compose -f compose.unitree.yml --profile sim run --rm unitree-listen \
   g1-bobby-unitree-listen --duration 5 --require-samples
 ```
 
+Forward received snapshots into the API cache:
+
+```bash
+docker compose up --build api
+docker compose -f compose.unitree.yml --profile sim run --rm unitree-listen \
+  g1-bobby-unitree-listen --api-url http://127.0.0.1:8010
+curl http://127.0.0.1:8010/unitree/state
+```
+
 The launcher defaults to:
 
 ```text
@@ -124,6 +133,7 @@ G1_BOBBY_UNITREE_SIM_ELASTIC_BAND=true
 G1_BOBBY_UNITREE_SIM_PRINT_SCENE_INFO=false
 G1_BOBBY_UNITREE_LISTEN_SAMPLE_INTERVAL_S=1
 G1_BOBBY_UNITREE_LISTEN_MAX_MOTORS=6
+G1_BOBBY_API_URL=http://127.0.0.1:8010
 ```
 
 Override the scene when needed:

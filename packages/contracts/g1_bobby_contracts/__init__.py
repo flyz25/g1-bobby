@@ -17,6 +17,12 @@ from .events import (
     TelemetryEvent,
 )
 from .state import ControlMode, RobotState
+from .unitree import (
+    UnitreeDdsInfo,
+    UnitreeDdsSnapshot,
+    UnitreeSampleAges,
+    UnitreeSampleCounts,
+)
 
 __all__ = [
     "AckEvent",
@@ -35,5 +41,8 @@ __all__ = [
     "StateEvent",
     "StopPayload",
     "TelemetryEvent",
+    "UnitreeDdsInfo",
+    "UnitreeDdsSnapshot",
+    "UnitreeSampleAges",
+    "UnitreeSampleCounts",
 ]
-

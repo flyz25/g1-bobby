@@ -6,6 +6,25 @@ from g1_bobby_api.app import create_app
 from g1_bobby_api.config import Settings
 
 
+UNITREE_SNAPSHOT = {
+    "status": "receiving",
+    "timestamp_s": 123.0,
+    "dds": {
+        "domain_id": 1,
+        "interface": "lo",
+        "robot": "g1",
+        "topics": {
+            "low_state": "rt/lowstate",
+            "sport_mode_state": "rt/sportmodestate",
+        },
+    },
+    "sample_counts": {"low_state": 1, "sport_mode_state": 1},
+    "ages_s": {"low_state": 0.0, "sport_mode_state": 0.0},
+    "low_state": {"motor_count": 35},
+    "sport_mode_state": {"position": [0, 0, 1.2]},
+}
+
+
 def test_health_and_state_endpoints() -> None:
     with TestClient(create_app(Settings(_env_file=None))) as client:
         health = client.get("/health")
@@ -18,6 +37,7 @@ def test_health_and_state_endpoints() -> None:
         assert runtime_body["adapter"] == "mock"
         assert runtime_body["active_operator_connected"] is False
         assert runtime_body["command_gate"]["max_commands_per_second"] == 20
+        assert runtime_body["unitree_state"]["status"] == "not_available"
 
         state = client.get("/state")
         assert state.status_code == 200
@@ -45,6 +65,34 @@ def test_reset_estop_requires_operator_token() -> None:
         reset = client.post("/reset-estop")
         assert reset.status_code == 401
         assert reset.json()["detail"] == "invalid operator token"
+
+
+def test_unitree_state_ingest_and_readback() -> None:
+    with TestClient(create_app(Settings(_env_file=None))) as client:
+        missing = client.get("/unitree/state")
+        assert missing.status_code == 404
+
+        unauthorized = client.post("/unitree/state", json=UNITREE_SNAPSHOT)
+        assert unauthorized.status_code == 401
+
+        accepted = client.post(
+            "/unitree/state",
+            json=UNITREE_SNAPSHOT,
+            headers={"X-Operator-Token": "dev-operator-token"},
+        )
+        assert accepted.status_code == 200
+        assert accepted.json() == {
+            "status": "accepted",
+            "updates": 1,
+            "snapshot_status": "receiving",
+        }
+
+        readback = client.get("/unitree/state")
+        assert readback.status_code == 200
+        assert readback.json()["low_state"]["motor_count"] == 35
+
+        runtime = client.get("/runtime")
+        assert runtime.json()["unitree_state"]["updates"] == 1
 
 
 def test_websocket_rejects_invalid_token() -> None:

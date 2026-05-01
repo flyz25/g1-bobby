@@ -3,12 +3,15 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass, field
 import json
+import os
 from os import environ
 import signal
 import sys
 import threading
 import time
 from typing import Any, Mapping, Sequence
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 
 TOPIC_LOW_STATE = "rt/lowstate"
@@ -18,6 +21,7 @@ DEFAULT_INTERFACE = "lo"
 DEFAULT_ROBOT = "g1"
 DEFAULT_SAMPLE_INTERVAL_S = 1.0
 DEFAULT_MAX_MOTORS = 6
+DEFAULT_API_TIMEOUT_S = 2.0
 HG_LOW_STATE_ROBOTS = {"g1", "h1_2"}
 
 
@@ -30,6 +34,9 @@ class UnitreeListenConfig:
     sample_interval_s: float
     max_motors: int
     require_samples: bool
+    api_url: str | None
+    api_token: str | None
+    api_timeout_s: float
 
 
 @dataclass
@@ -183,6 +190,32 @@ def summarize_sport_mode_state(msg: Any) -> dict[str, object]:
     }
 
 
+def build_api_ingest_url(api_url: str) -> str:
+    return f"{api_url.rstrip('/')}/unitree/state"
+
+
+def post_snapshot_to_api(
+    snapshot: Mapping[str, object],
+    api_url: str,
+    api_token: str | None,
+    timeout_s: float = DEFAULT_API_TIMEOUT_S,
+) -> dict[str, object]:
+    payload = json.dumps(snapshot).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if api_token:
+        headers["X-Operator-Token"] = api_token
+
+    request = Request(
+        build_api_ingest_url(api_url),
+        data=payload,
+        headers=headers,
+        method="POST",
+    )
+    with urlopen(request, timeout=timeout_s) as response:
+        body = response.read().decode("utf-8")
+    return json.loads(body) if body else {}
+
+
 def build_parser(env: Mapping[str, str] | None = None) -> argparse.ArgumentParser:
     source_env = environ if env is None else env
     parser = argparse.ArgumentParser(
@@ -246,6 +279,28 @@ def build_parser(env: Mapping[str, str] | None = None) -> argparse.ArgumentParse
         default=env_bool(source_env, "G1_BOBBY_UNITREE_LISTEN_REQUIRE_SAMPLES", False),
         help="Exit non-zero if no DDS samples are received before the listener stops.",
     )
+    parser.add_argument(
+        "--api-url",
+        default=env_default(source_env, "G1_BOBBY_API_URL", ""),
+        help="Optional API base URL. When set, received snapshots are posted to /unitree/state.",
+    )
+    parser.add_argument(
+        "--api-token",
+        default=env_default(source_env, "G1_BOBBY_OPERATOR_TOKEN", "dev-operator-token"),
+        help="Operator token used when posting snapshots to the API.",
+    )
+    parser.add_argument(
+        "--api-timeout",
+        type=float,
+        default=float(
+            env_default(
+                source_env,
+                "G1_BOBBY_UNITREE_LISTEN_API_TIMEOUT_S",
+                str(DEFAULT_API_TIMEOUT_S),
+            )
+        ),
+        help="HTTP timeout in seconds for API snapshot posts.",
+    )
     return parser
 
 
@@ -263,6 +318,9 @@ def config_from_args(
         sample_interval_s=max(args.sample_interval, 0.1),
         max_motors=max(args.max_motors, 0),
         require_samples=args.require_samples,
+        api_url=args.api_url or None,
+        api_token=args.api_token or None,
+        api_timeout_s=max(args.api_timeout, 0.1),
     )
 
 
@@ -316,7 +374,29 @@ def run_listener(config: UnitreeListenConfig) -> int:
             if config.duration_s is not None and now - started_at >= config.duration_s:
                 break
             if now >= next_print_at:
-                print(json.dumps(collector.snapshot(), sort_keys=True), flush=True)
+                snapshot = collector.snapshot()
+                print(json.dumps(snapshot, sort_keys=True), flush=True)
+                if config.api_url and snapshot["status"] == "receiving":
+                    try:
+                        post_snapshot_to_api(
+                            snapshot,
+                            config.api_url,
+                            config.api_token,
+                            config.api_timeout_s,
+                        )
+                    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+                        print(
+                            json.dumps(
+                                {
+                                    "status": "api_post_failed",
+                                    "api_url": build_api_ingest_url(config.api_url),
+                                    "error": str(exc),
+                                },
+                                sort_keys=True,
+                            ),
+                            file=sys.stderr,
+                            flush=True,
+                        )
                 next_print_at = now + config.sample_interval_s
             time.sleep(0.05)
     finally:
@@ -353,5 +433,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 130
 
 
+def cli_main(argv: Sequence[str] | None = None) -> None:
+    exit_code = main(argv)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    # The Unitree DDS runtime can leave native/non-daemon threads alive after
+    # subscribers close. Force process exit so bounded CLI runs do not hang.
+    os._exit(exit_code)
+
+
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    cli_main(sys.argv[1:])

@@ -2,7 +2,9 @@ from types import SimpleNamespace
 
 from g1_bobby_unitree_bridge.listener import (
     UnitreeStateCollector,
+    build_api_ingest_url,
     config_from_args,
+    post_snapshot_to_api,
     sequence_to_floats,
     summarize_low_state,
     summarize_sport_mode_state,
@@ -19,6 +21,8 @@ def test_config_from_args_uses_defaults() -> None:
     assert config.sample_interval_s == 1.0
     assert config.max_motors == 6
     assert config.require_samples is False
+    assert config.api_url is None
+    assert config.api_token == "dev-operator-token"
 
 
 def test_config_from_args_prefers_environment() -> None:
@@ -32,6 +36,8 @@ def test_config_from_args_prefers_environment() -> None:
             "G1_BOBBY_UNITREE_LISTEN_SAMPLE_INTERVAL_S": "0.25",
             "G1_BOBBY_UNITREE_LISTEN_MAX_MOTORS": "2",
             "G1_BOBBY_UNITREE_LISTEN_REQUIRE_SAMPLES": "true",
+            "G1_BOBBY_API_URL": "http://api:8010",
+            "G1_BOBBY_OPERATOR_TOKEN": "secret",
         },
     )
 
@@ -42,6 +48,8 @@ def test_config_from_args_prefers_environment() -> None:
     assert config.sample_interval_s == 0.25
     assert config.max_motors == 2
     assert config.require_samples is True
+    assert config.api_url == "http://api:8010"
+    assert config.api_token == "secret"
 
 
 def test_sequence_to_floats_limits_values() -> None:
@@ -119,3 +127,42 @@ def test_state_collector_snapshot_reports_samples() -> None:
         },
     }
     assert snapshot["sample_counts"]["sport_mode_state"] == 1
+
+
+def test_build_api_ingest_url_appends_unitree_state_path() -> None:
+    assert build_api_ingest_url("http://127.0.0.1:8010/") == (
+        "http://127.0.0.1:8010/unitree/state"
+    )
+
+
+def test_post_snapshot_to_api_posts_json(monkeypatch) -> None:
+    calls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"status":"accepted"}'
+
+    def fake_urlopen(request, timeout):
+        calls.append((request, timeout))
+        return Response()
+
+    monkeypatch.setattr("g1_bobby_unitree_bridge.listener.urlopen", fake_urlopen)
+
+    response = post_snapshot_to_api(
+        {"status": "receiving"},
+        "http://api:8010",
+        "token",
+        timeout_s=3,
+    )
+
+    request, timeout = calls[0]
+    assert response == {"status": "accepted"}
+    assert request.full_url == "http://api:8010/unitree/state"
+    assert request.headers["X-operator-token"] == "token"
+    assert timeout == 3

@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LD_LIBRARY_PATH=/opt/cyclonedds/install/lib \
     MUJOCO_HOME=/opt/mujoco/mujoco-3.3.6 \
     UNITREE_MUJOCO_HOME=/opt/unitree/unitree_mujoco \
-    PYTHONPATH=/workspace/g1-bobby/apps/unitree_bridge
+    PYTHONPATH=/workspace/g1-bobby/apps/unitree_bridge:/workspace/g1-bobby/packages/contracts
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -99,6 +99,7 @@ RUN python3 -m pip install --no-cache-dir --upgrade "pip<26" "setuptools<80" whe
 WORKDIR /workspace/g1-bobby
 
 COPY apps/unitree_bridge ./apps/unitree_bridge
+COPY packages/contracts ./packages/contracts
 RUN printf '%s\n' \
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \

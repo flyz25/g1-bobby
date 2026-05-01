@@ -9,6 +9,7 @@ from g1_bobby_adapters import (
 )
 from g1_bobby_api.config import RobotAdapterName, Settings
 from g1_bobby_api.runtime import Runtime
+from g1_bobby_contracts import UnitreeDdsSnapshot
 
 
 def test_default_settings_select_mock_adapter() -> None:
@@ -103,6 +104,41 @@ async def test_runtime_allows_only_one_operator_session() -> None:
         await runtime.release_operator_session("session-1")
         assert runtime.active_operator_connected is False
         assert await runtime.claim_operator_session("session-2")
+    finally:
+        await runtime.adapter.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_runtime_stores_unitree_state_snapshot() -> None:
+    runtime = await Runtime.create(Settings(_env_file=None))
+    snapshot = UnitreeDdsSnapshot.model_validate(
+        {
+            "status": "receiving",
+            "timestamp_s": 123.0,
+            "dds": {
+                "domain_id": 1,
+                "interface": "lo",
+                "robot": "g1",
+                "topics": {
+                    "low_state": "rt/lowstate",
+                    "sport_mode_state": "rt/sportmodestate",
+                },
+            },
+            "sample_counts": {"low_state": 1, "sport_mode_state": 1},
+            "ages_s": {"low_state": 0.0, "sport_mode_state": 0.0},
+            "low_state": {"motor_count": 35},
+            "sport_mode_state": {"position": [0, 0, 1.2]},
+        }
+    )
+
+    try:
+        await runtime.record_unitree_state(snapshot)
+
+        assert await runtime.get_unitree_state() == snapshot
+        status = await runtime.unitree_state_status()
+        assert status["updates"] == 1
+        assert status["status"] == "receiving"
+        assert status["age_s"] is not None
     finally:
         await runtime.adapter.disconnect()
 

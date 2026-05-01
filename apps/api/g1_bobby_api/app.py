@@ -9,6 +9,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from g1_bobby_contracts.events import StateEvent
+from g1_bobby_contracts.unitree import UnitreeDdsSnapshot
 
 from .config import Settings
 from .runtime import Runtime
@@ -56,12 +57,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "accepted_commands": runtime.accepted_commands,
             "rejected_commands": runtime.rejected_commands,
             "active_operator_connected": runtime.active_operator_connected,
+            "unitree_state": await runtime.unitree_state_status(),
         }
 
     @app.get("/state")
     async def state() -> StateEvent:
         robot_state = await app.state.runtime.adapter.get_state()
         return StateEvent(state=robot_state)
+
+    @app.get("/unitree/state")
+    async def unitree_state() -> UnitreeDdsSnapshot:
+        snapshot = await app.state.runtime.get_unitree_state()
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="unitree state is not available")
+        return snapshot
+
+    @app.post("/unitree/state")
+    async def ingest_unitree_state(
+        snapshot: UnitreeDdsSnapshot,
+        x_operator_token: Annotated[str | None, Header(alias="X-Operator-Token")] = None,
+    ) -> dict[str, object]:
+        if x_operator_token != app.state.settings.operator_token:
+            raise HTTPException(status_code=401, detail="invalid operator token")
+
+        await app.state.runtime.record_unitree_state(snapshot)
+        return {
+            "status": "accepted",
+            "updates": app.state.runtime.unitree_state_updates,
+            "snapshot_status": snapshot.status,
+        }
 
     @app.post("/estop")
     async def estop() -> StateEvent:
