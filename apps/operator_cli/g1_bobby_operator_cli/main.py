@@ -178,6 +178,12 @@ def _format_unitree_execution_result_suffix(event: dict[str, Any]) -> str:
     status = execution_result.get("status")
     if isinstance(status, str):
         details.append(f"status={status}")
+    transport = execution_result.get("transport")
+    if isinstance(transport, str):
+        details.append(f"transport={transport}")
+    target = execution_result.get("target")
+    if isinstance(target, str):
+        details.append(f"target={target}")
     return f" [{' '.join(details)}]" if details else ""
 
 
