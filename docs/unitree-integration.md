@@ -112,6 +112,7 @@ The image is based on Ubuntu 22.04 / ROS2 Humble and builds:
 - `g1-bobby-unitree-listen`
 - `g1-bobby-unitree-command-dry-run`
 - `g1-bobby-unitree-publish-plan`
+- `g1-bobby-unitree-publish-plan-stub`
 - `g1-bobby-unitree-sim`
 
 Local-only probe:
@@ -147,6 +148,14 @@ Concrete ROS2 or SDK publish-plan rendering, without transport execution:
 docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
   g1-bobby-unitree-publish-plan --transport sdk_real --command-json \
   '{"type":"set_mode","seq":1,"timestamp":123.0,"payload":{"mode":"manual"}}'
+```
+
+Plan-backed execution stubs, still without live ROS2 or DDS publish:
+
+```bash
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  g1-bobby-unitree-publish-plan-stub --transport ros2_plan_stub --command-json \
+  '{"type":"move_velocity","seq":3,"timestamp":123.0,"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}'
 ```
 
 At runtime, the API stores the latest accepted dry-run plan and exposes it via:

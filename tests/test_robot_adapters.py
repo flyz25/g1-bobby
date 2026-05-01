@@ -18,6 +18,7 @@ from g1_bobby_adapters import (
     UnitreeAdapterConfig,
     UnitreeAdapterConfigurationError,
 )
+from g1_bobby_unitree_bridge.publisher_plan_stub import PlanStubUnitreeCommandPublisher
 
 
 async def test_mock_stop_returns_robot_to_idle() -> None:
@@ -111,6 +112,64 @@ async def test_unitree_ros2_stub_transport_publishes_without_actuation(monkeypat
         assert state.connected is True
         assert state.mode == ControlMode.MANUAL
         assert state.pose_label == "unitree-ros2_stub"
+    finally:
+        await adapter.disconnect()
+
+
+async def test_unitree_ros2_plan_stub_transport_executes_publish_plan(monkeypatch) -> None:
+    monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
+    publisher = PlanStubUnitreeCommandPublisher(transport="ros2_plan_stub")
+    adapter = UnitreeAdapter(
+        UnitreeAdapterConfig(
+            network_interface="eth0",
+            sdk_module="unitree_sdk_for_test",
+            enable_motor_commands=True,
+            command_transport="ros2_plan_stub",
+        ),
+        publisher=publisher,
+    )
+    await adapter.connect()
+    try:
+        await adapter.execute(
+            StopCommand(
+                type=CommandType.STOP,
+                seq=2,
+                timestamp=time(),
+                payload=StopPayload(reason="test_stop"),
+            )
+        )
+        emitted = publisher.emitted_plans()
+        assert emitted[0].plan["topic"] == "/lowcmd"
+        assert emitted[0].plan["payload"]["velocity"]["linear_x"] == 0.0
+    finally:
+        await adapter.disconnect()
+
+
+async def test_unitree_sdk_plan_stub_transport_executes_publish_plan(monkeypatch) -> None:
+    monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
+    publisher = PlanStubUnitreeCommandPublisher(transport="sdk_plan_stub")
+    adapter = UnitreeAdapter(
+        UnitreeAdapterConfig(
+            network_interface="eth0",
+            sdk_module="unitree_sdk_for_test",
+            enable_motor_commands=True,
+            command_transport="sdk_plan_stub",
+        ),
+        publisher=publisher,
+    )
+    await adapter.connect()
+    try:
+        await adapter.execute(
+            SetModeCommand(
+                type=CommandType.SET_MODE,
+                seq=1,
+                timestamp=time(),
+                payload=SetModePayload(mode="manual"),
+            )
+        )
+        emitted = publisher.emitted_plans()
+        assert emitted[0].plan["binding_target"] == "SportClient/basic service request"
+        assert emitted[0].plan["payload"]["operation"] == "switch_mode"
     finally:
         await adapter.disconnect()
 

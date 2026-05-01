@@ -67,9 +67,15 @@ class UnitreeAdapter:
         if normalized == "ros2_stub":
             module = import_module("g1_bobby_unitree_bridge.publisher_stub")
             return module.Ros2StubUnitreeCommandPublisher()
+        if normalized == "ros2_plan_stub":
+            module = import_module("g1_bobby_unitree_bridge.publisher_plan_stub")
+            return module.PlanStubUnitreeCommandPublisher(transport="ros2_plan_stub")
         if normalized == "ros2_real":
             module = import_module("g1_bobby_unitree_bridge.publisher_ros2")
             return module.Ros2RealUnitreeCommandPublisher()
+        if normalized == "sdk_plan_stub":
+            module = import_module("g1_bobby_unitree_bridge.publisher_plan_stub")
+            return module.PlanStubUnitreeCommandPublisher(transport="sdk_plan_stub")
         if normalized == "sdk_real":
             module = import_module("g1_bobby_unitree_bridge.publisher_sdk")
             return module.SdkRealUnitreeCommandPublisher(

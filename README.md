@@ -134,6 +134,13 @@ g1-bobby-unitree-publish-plan --transport ros2_real --command-json \
   '{"type":"move_velocity","seq":3,"timestamp":123.0,"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}'
 ```
 
+Execute through a plan-backed stub that consumes the same publish-plan mapping:
+
+```bash
+g1-bobby-unitree-publish-plan-stub --transport sdk_plan_stub --command-json \
+  '{"type":"set_mode","seq":1,"timestamp":123.0,"payload":{"mode":"manual"}}'
+```
+
 The API also exposes the latest accepted dry-run translation at:
 
 ```text
@@ -301,6 +308,9 @@ The repo now also builds a concrete ROS2 publish-plan skeleton for those
 bindings, so the remaining gap is runtime publisher wiring rather than command
 shape discovery.
 
+For execution rehearsal without ROS2 runtime, `ros2_plan_stub` now consumes that
+same publish-plan builder and emits the rendered plan as a stub result.
+
 `G1_BOBBY_UNITREE_COMMAND_TRANSPORT=sdk_real` now exists as a fail-closed
 Unitree SDK/DDS skeleton. It verifies `unitree_sdk2py` importability and then
 exits with a clear DDS wiring error until native G1 command topic/service
@@ -317,6 +327,9 @@ live DDS command publish occurs yet.
 
 The repo now also builds a concrete SDK publish-plan skeleton for those
 bindings, so the remaining gap is native DDS client/publisher execution.
+
+For execution rehearsal without DDS runtime, `sdk_plan_stub` now consumes that
+same publish-plan builder and emits the rendered plan as a stub result.
 
 No real motor command should bypass:
 
