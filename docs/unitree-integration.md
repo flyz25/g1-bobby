@@ -74,6 +74,16 @@ These are still audit-grade binding targets only. `heartbeat` and `estop` do
 not yet have a confirmed ROS2 publish surface in this repo, so `ros2_real`
 continues to fail closed for them.
 
+Current confirmed Unitree SDK/DDS binding intents in the repo are:
+
+- `set_mode` -> `SportClient/basic service request`
+- `move_velocity` -> `rt/lowcmd` with `unitree_hg.msg.dds_.LowCmd_`
+- `stop` -> `rt/lowcmd` with `unitree_hg.msg.dds_.LowCmd_`
+
+These are still audit-grade SDK binding targets only. `heartbeat` and `estop`
+do not yet have a confirmed DDS publish surface in this repo, so `sdk_real`
+continues to fail closed for them.
+
 ## Docker ROS2/Unitree Environment
 
 Use the dedicated container instead of installing ROS2 Humble natively on WSL

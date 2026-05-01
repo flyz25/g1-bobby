@@ -295,6 +295,15 @@ Unitree SDK/DDS skeleton. It verifies `unitree_sdk2py` importability and then
 exits with a clear DDS wiring error until native G1 command topic/service
 binding is implemented.
 
+That SDK/DDS skeleton is now narrowed to the current confirmed G1 intents:
+
+- `set_mode` -> SportClient/basic service request
+- `move_velocity` / `stop` -> `rt/lowcmd` (`unitree_hg.msg.dds_.LowCmd_`)
+
+These bindings are still fail-closed. They track the current best-known
+high-level and low-level SDK surfaces from official Unitree SDK material, but no
+live DDS command publish occurs yet.
+
 No real motor command should bypass:
 
 ```text
