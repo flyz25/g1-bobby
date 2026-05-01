@@ -55,6 +55,7 @@ class RejectEvent(BaseModel):
     seq: int | None = None
     code: ErrorCode
     reason: str
+    unitree_execution_result: UnitreeExecutionResultRecord | None = None
 
 
 class RejectedCommandRecord(BaseModel):

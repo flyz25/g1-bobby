@@ -484,6 +484,8 @@ def test_execution_failure_records_blocked_execution_result(tmp_path: Path) -> N
                 reject = operator.receive_json()
                 assert reject["type"] == "reject"
                 assert reject["code"] == "execution_failed"
+                assert reject["unitree_execution_result"]["execution_result"]["status"] == "blocked"
+                assert reject["unitree_execution_result"]["execution_result"]["transport"] == "disabled"
 
                 with client.websocket_connect("/ws/operator/audit?token=dev-operator-token") as audit:
                     first = audit.receive_json()
@@ -492,6 +494,11 @@ def test_execution_failure_records_blocked_execution_result(tmp_path: Path) -> N
                     execution_result_event = first if first["type"] == "execution_result" else second
                     assert execution_result_event["unitree_execution_result"]["execution_result"]["status"] == "blocked"
                     assert execution_result_event["unitree_execution_result"]["execution_result"]["transport"] == "disabled"
+                    rejected_event = first if first["type"] == "rejected_command" else second
+                    assert (
+                        rejected_event["rejected_command"]["rejection"]["unitree_execution_result"]["execution_result"]["status"]
+                        == "blocked"
+                    )
 
             latest = client.get("/unitree/execution-result")
             assert latest.status_code == 200

@@ -149,8 +149,13 @@ def test_format_event_summarizes_ack_and_reject() -> None:
         " [exec_id=12 transport=ros2_plan_stub exec_target=/lowcmd]"
         " [result_id=13 status=stub_emitted]"
     )
-    assert format_event('{"type":"reject","seq":8,"code":"safety_rejected","reason":"operator heartbeat is stale"}') == (
-        "reject seq=8 code=safety_rejected reason=operator heartbeat is stale"
+    assert format_event(
+        '{"type":"reject","seq":8,"code":"execution_failed","reason":"transport disabled",'
+        '"unitree_execution_result":{"event_id":14,"recorded_at":125.0,"source":"live","stale":false,'
+        '"execution_result":{"transport":"disabled","command_type":"set_mode","status":"blocked",'
+        '"target":"disabled","detail":"transport disabled"}}}'
+    ) == (
+        "reject seq=8 code=execution_failed reason=transport disabled [result_id=14 status=blocked]"
     )
 
 

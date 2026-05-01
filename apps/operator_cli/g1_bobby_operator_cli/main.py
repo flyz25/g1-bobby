@@ -347,6 +347,7 @@ def format_event(raw_text: str, raw: bool = False) -> str:
             f"seq={event.get('seq')} "
             f"code={event.get('code')} "
             f"reason={event.get('reason')}"
+            f"{_format_unitree_execution_result_suffix(event)}"
         )
     return raw_text
 
