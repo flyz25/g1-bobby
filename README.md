@@ -8,7 +8,7 @@ The MVP does **not** send real robot motor commands. It provides:
 - WebSocket JSON operator protocol
 - fail-closed safety validation
 - stateful mock robot adapter
-- placeholder boundary for future Unitree integration
+- fail-closed boundary for future Unitree integration
 
 ## Quick Start
 
@@ -21,6 +21,12 @@ Open:
 
 ```text
 http://localhost:8010/health
+```
+
+Runtime status:
+
+```text
+http://localhost:8010/runtime
 ```
 
 Run tests with Docker:
@@ -51,4 +57,20 @@ See [docs/protocol.md](docs/protocol.md) and [samples/operator_messages.jsonl](s
 
 ## MVP Boundary
 
-Real Unitree SDK and ROS2 integration are intentionally deferred. The first milestone is to stabilize command contracts, safety behavior, and operator flow using `MockRobotAdapter`.
+Default runtime uses `G1_BOBBY_ROBOT_ADAPTER=mock`. `unitree` is available only as a fail-closed boundary for the future Unitree SDK/ROS2 bridge; it requires explicit network interface configuration and still refuses motor commands until the real transport binding is implemented.
+
+Key environment knobs:
+
+```text
+G1_BOBBY_ROBOT_ADAPTER=mock
+G1_BOBBY_UNITREE_NETWORK_INTERFACE=
+G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS=false
+G1_BOBBY_SAFETY_MAX_LINEAR_MPS=0.35
+G1_BOBBY_SAFETY_MAX_ANGULAR_RADPS=0.6
+```
+
+No real motor command should bypass:
+
+```text
+schema validation -> safety validator -> adapter boundary
+```

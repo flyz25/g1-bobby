@@ -11,6 +11,10 @@ def test_health_and_state_endpoints() -> None:
         assert health.status_code == 200
         assert health.json() == {"status": "online"}
 
+        runtime = client.get("/runtime")
+        assert runtime.status_code == 200
+        assert runtime.json()["adapter"] == "mock"
+
         state = client.get("/state")
         assert state.status_code == 200
         body = state.json()
@@ -101,4 +105,3 @@ def test_websocket_accepts_safe_manual_movement() -> None:
             event = websocket.receive_json()
             assert event["type"] == "ack"
             assert event["seq"] == 3
-

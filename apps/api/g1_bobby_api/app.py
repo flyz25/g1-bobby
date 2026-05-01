@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,8 +15,9 @@ from .websocket import router as websocket_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.settings = Settings()
-    app.state.runtime = await Runtime.create()
+    settings = Settings()
+    app.state.settings = settings
+    app.state.runtime = await Runtime.create(settings)
     yield
     await app.state.runtime.adapter.disconnect()
 
@@ -40,6 +42,14 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "online"}
 
+    @app.get("/runtime")
+    async def runtime_status() -> dict[str, object]:
+        runtime = app.state.runtime
+        return {
+            "adapter": runtime.adapter_name,
+            "safety": asdict(runtime.safety.limits),
+        }
+
     @app.get("/state")
     async def state() -> StateEvent:
         robot_state = await app.state.runtime.adapter.get_state()
@@ -63,4 +73,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-

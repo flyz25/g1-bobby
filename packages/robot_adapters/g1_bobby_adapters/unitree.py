@@ -1,29 +1,99 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from importlib import import_module
+from time import time
+
 from g1_bobby_contracts.commands import CommandEnvelope
-from g1_bobby_contracts.state import RobotState
+from g1_bobby_contracts.state import ControlMode, RobotState
+
+
+class UnitreeAdapterError(RuntimeError):
+    """Base error for the Unitree adapter boundary."""
+
+
+class UnitreeAdapterConfigurationError(UnitreeAdapterError):
+    """Raised when the Unitree adapter is selected without required wiring."""
+
+
+@dataclass(frozen=True)
+class UnitreeAdapterConfig:
+    network_interface: str | None = None
+    sdk_module: str = "unitree_sdk2py"
+    enable_motor_commands: bool = False
 
 
 class UnitreeAdapter:
-    """Placeholder boundary for the real Unitree SDK/ROS2 adapter.
+    """Fail-closed boundary for the real Unitree SDK/ROS2 adapter.
 
-    This class intentionally does not send motor commands. The mock-first MVP
-    must stabilize command contracts and safety validation before real hardware
-    integration is added.
+    This class validates the runtime wiring needed for a future hardware
+    adapter. It intentionally does not send motor commands until a concrete
+    Unitree SDK or ROS2 transport binding is implemented and reviewed.
     """
 
+    def __init__(self, config: UnitreeAdapterConfig | None = None) -> None:
+        self.config = config or UnitreeAdapterConfig()
+        self._state = RobotState(
+            connected=False,
+            estop_engaged=True,
+            mode=ControlMode.IDLE,
+            battery_percent=0.0,
+            obstacle_distance_m=None,
+            last_state_at=time(),
+            last_heartbeat_at=None,
+            pose_label="unitree-disconnected",
+        )
+
     async def connect(self) -> None:
-        raise NotImplementedError("Unitree hardware adapter is not implemented in MVP")
+        if not self.config.network_interface:
+            raise UnitreeAdapterConfigurationError(
+                "G1_BOBBY_UNITREE_NETWORK_INTERFACE is required when "
+                "G1_BOBBY_ROBOT_ADAPTER=unitree"
+            )
+
+        try:
+            import_module(self.config.sdk_module)
+        except ModuleNotFoundError as exc:
+            if exc.name == self.config.sdk_module:
+                raise UnitreeAdapterConfigurationError(
+                    f"Unitree SDK module '{self.config.sdk_module}' is not installed"
+                ) from exc
+            raise
+
+        raise UnitreeAdapterConfigurationError(
+            "Unitree SDK import succeeded, but the hardware transport binding is "
+            "not implemented yet; keep G1_BOBBY_ROBOT_ADAPTER=mock until the "
+            "real bridge is wired"
+        )
 
     async def disconnect(self) -> None:
-        raise NotImplementedError("Unitree hardware adapter is not implemented in MVP")
+        self._state.connected = False
+        self._state.mode = ControlMode.IDLE
+        self._state.last_state_at = time()
 
     async def get_state(self) -> RobotState:
-        raise NotImplementedError("Unitree hardware adapter is not implemented in MVP")
+        self._state.last_state_at = time()
+        return self._state.model_copy()
 
     async def execute(self, command: CommandEnvelope) -> None:
-        raise NotImplementedError("Unitree hardware adapter is not implemented in MVP")
+        if not self.config.enable_motor_commands:
+            raise UnitreeAdapterConfigurationError(
+                f"motor command execution is disabled for Unitree adapter: {command.type}"
+            )
+
+        raise UnitreeAdapterConfigurationError(
+            "Unitree motor command binding is not implemented yet"
+        )
 
     async def emergency_stop(self) -> None:
-        raise NotImplementedError("Unitree hardware adapter is not implemented in MVP")
+        self._state.estop_engaged = True
+        self._state.mode = ControlMode.IDLE
+        self._state.last_state_at = time()
 
+    async def reset_emergency_stop(self) -> bool:
+        if not self._state.connected:
+            return False
+        self._state.estop_engaged = False
+        self._state.mode = ControlMode.IDLE
+        self._state.last_state_at = time()
+        return True
