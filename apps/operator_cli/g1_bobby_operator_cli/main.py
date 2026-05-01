@@ -5,6 +5,7 @@ import asyncio
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import websockets
 
@@ -32,11 +33,87 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--delay-s", type=float, default=0.05, help="Delay between commands")
     parser.add_argument("--listen-s", type=float, default=0.0, help="Listen for telemetry after send")
     parser.add_argument("--timeout-s", type=float, default=5.0, help="Connect/receive timeout")
+    parser.add_argument("--raw", action="store_true", help="Print raw JSON events")
     return parser
 
 
 async def receive_event(websocket, timeout_s: float) -> str:
     return await asyncio.wait_for(websocket.recv(), timeout=timeout_s)
+
+
+def _format_unitree_suffix(event: dict[str, Any]) -> str:
+    unitree_state = event.get("unitree_state")
+    if not isinstance(unitree_state, dict):
+        return ""
+    sample_counts = unitree_state.get("sample_counts")
+    if not isinstance(sample_counts, dict):
+        return ""
+    low_state = sample_counts.get("low_state")
+    sport_mode_state = sample_counts.get("sport_mode_state")
+    details: list[str] = []
+    if isinstance(low_state, int | float):
+        details.append(f"low={int(low_state)}")
+    if isinstance(sport_mode_state, int | float):
+        details.append(f"sport={int(sport_mode_state)}")
+    status = unitree_state.get("status")
+    if isinstance(status, str):
+        details.insert(0, f"unitree={status}")
+    return f" [{' '.join(details)}]" if details else ""
+
+
+def format_event(raw_text: str, raw: bool = False) -> str:
+    if raw:
+        return raw_text
+
+    try:
+        event = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return raw_text
+    if not isinstance(event, dict):
+        return raw_text
+
+    event_type = event.get("type")
+    if event_type == "state":
+        state = event.get("state", {})
+        if isinstance(state, dict):
+            return (
+                "state "
+                f"connected={state.get('connected')} "
+                f"mode={state.get('mode')} "
+                f"estop={state.get('estop_engaged')} "
+                f"pose={state.get('pose_label')}"
+                f"{_format_unitree_suffix(event)}"
+            )
+    if event_type == "telemetry":
+        state = event.get("state", {})
+        if isinstance(state, dict):
+            return (
+                "telemetry "
+                f"accepted={event.get('accepted_commands')} "
+                f"rejected={event.get('rejected_commands')} "
+                f"mode={state.get('mode')} "
+                f"pose={state.get('pose_label')}"
+                f"{_format_unitree_suffix(event)}"
+            )
+    if event_type == "ack":
+        return (
+            "ack "
+            f"seq={event.get('seq')} "
+            f"command={event.get('command_type')} "
+            f"message={event.get('message')}"
+        )
+    if event_type == "reject":
+        return (
+            "reject "
+            f"seq={event.get('seq')} "
+            f"code={event.get('code')} "
+            f"reason={event.get('reason')}"
+        )
+    return raw_text
+
+
+def print_event(raw_text: str, raw: bool = False) -> None:
+    print(format_event(raw_text, raw=raw))
 
 
 async def run(args: argparse.Namespace) -> int:
@@ -50,10 +127,10 @@ async def run(args: argparse.Namespace) -> int:
         messages = refresh_message_timestamps(messages)
 
     async with websockets.connect(url, open_timeout=args.timeout_s) as websocket:
-        print(await receive_event(websocket, args.timeout_s))
+        print_event(await receive_event(websocket, args.timeout_s), raw=args.raw)
         for message in messages:
             await websocket.send(json.dumps(message, separators=(",", ":")))
-            print(await receive_event(websocket, args.timeout_s))
+            print_event(await receive_event(websocket, args.timeout_s), raw=args.raw)
             if args.delay_s > 0:
                 await asyncio.sleep(args.delay_s)
 
@@ -64,7 +141,10 @@ async def run(args: argparse.Namespace) -> int:
                 if timeout_s <= 0:
                     break
                 try:
-                    print(await receive_event(websocket, min(timeout_s, args.timeout_s)))
+                    print_event(
+                        await receive_event(websocket, min(timeout_s, args.timeout_s)),
+                        raw=args.raw,
+                    )
                 except TimeoutError:
                     break
 

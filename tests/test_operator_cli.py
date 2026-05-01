@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from g1_bobby_operator_cli.main import format_event
 from g1_bobby_operator_cli.messages import (
     attach_token,
     demo_messages,
@@ -67,3 +68,44 @@ def test_refresh_message_timestamps_copies_messages() -> None:
 
     assert refreshed == [{"type": "heartbeat", "timestamp": 200.0}]
     assert original == [{"type": "heartbeat", "timestamp": 1.0}]
+
+
+def test_format_event_summarizes_state_with_unitree_projection() -> None:
+    rendered = format_event(
+        '{"type":"state","state":{"connected":true,"mode":"manual","estop_engaged":false,'
+        '"pose_label":"unitree-g1 x=0.00 y=0.00 z=1.20"},'
+        '"unitree_state":{"status":"receiving","sample_counts":{"low_state":12,"sport_mode_state":13}}}'
+    )
+
+    assert rendered == (
+        "state connected=True mode=manual estop=False pose=unitree-g1 x=0.00 y=0.00 z=1.20 "
+        "[unitree=receiving low=12 sport=13]"
+    )
+
+
+def test_format_event_summarizes_telemetry() -> None:
+    rendered = format_event(
+        '{"type":"telemetry","accepted_commands":3,"rejected_commands":1,'
+        '"state":{"mode":"manual","pose_label":"unitree-g1 x=0.00 y=0.00 z=1.20"},'
+        '"unitree_state":{"status":"receiving","sample_counts":{"low_state":8,"sport_mode_state":9}}}'
+    )
+
+    assert rendered == (
+        "telemetry accepted=3 rejected=1 mode=manual pose=unitree-g1 x=0.00 y=0.00 z=1.20 "
+        "[unitree=receiving low=8 sport=9]"
+    )
+
+
+def test_format_event_summarizes_ack_and_reject() -> None:
+    assert format_event('{"type":"ack","seq":7,"command_type":"move_velocity","message":"accepted"}') == (
+        "ack seq=7 command=move_velocity message=accepted"
+    )
+    assert format_event('{"type":"reject","seq":8,"code":"safety_rejected","reason":"operator heartbeat is stale"}') == (
+        "reject seq=8 code=safety_rejected reason=operator heartbeat is stale"
+    )
+
+
+def test_format_event_can_preserve_raw_json() -> None:
+    raw = '{"type":"ack","seq":1}'
+
+    assert format_event(raw, raw=True) == raw

@@ -67,6 +67,9 @@ Run a JSONL command script with fresh timestamps:
 g1-bobby-operator --script samples/operator_messages.jsonl
 ```
 
+The CLI prints concise event summaries by default. Use `--raw` to keep the
+original JSON event stream.
+
 ## Unitree ROS2 Container
 
 The robot stack runs in a separate Ubuntu 22.04 / ROS2 Humble container so WSL
