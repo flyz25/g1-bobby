@@ -53,6 +53,14 @@ commands enter FastAPI first, then schema validation, safety validation, and
 only then a ROS2 or Unitree SDK command boundary. LLM or operator input must not
 connect directly to motor control.
 
+Inside that adapter boundary, the current repo now supports two transport modes:
+
+- `disabled`: fail-closed default
+- `dry_run`: publishable Unitree translation path without DDS publish or hardware actuation
+
+This is still not the real ROS2 or SDK transport binding. It is the software
+seam that future publisher wiring will implement.
+
 ## Docker ROS2/Unitree Environment
 
 Use the dedicated container instead of installing ROS2 Humble natively on WSL

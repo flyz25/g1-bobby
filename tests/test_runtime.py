@@ -2,8 +2,10 @@ import json
 from pathlib import Path
 
 import pytest
+from types import SimpleNamespace
 
 from g1_bobby_adapters import (
+    DryRunUnitreeCommandPublisher,
     MockRobotAdapter,
     UnitreeAdapter,
     UnitreeAdapterConfig,
@@ -65,6 +67,7 @@ def test_settings_build_unitree_config() -> None:
         unitree_network_interface="eth0",
         unitree_sdk_module="unitree_sdk_for_test",
         unitree_enable_motor_commands=True,
+        unitree_command_transport="dry_run",
     )
 
     config = settings.unitree_config()
@@ -72,6 +75,7 @@ def test_settings_build_unitree_config() -> None:
     assert config.network_interface == "eth0"
     assert config.sdk_module == "unitree_sdk_for_test"
     assert config.enable_motor_commands is True
+    assert config.command_transport == "dry_run"
 
 
 def test_settings_build_safety_limits() -> None:
@@ -510,3 +514,26 @@ async def test_unitree_adapter_reports_missing_sdk() -> None:
 
     with pytest.raises(UnitreeAdapterConfigurationError, match="not installed"):
         await adapter.connect()
+
+
+@pytest.mark.asyncio
+async def test_unitree_adapter_connects_with_dry_run_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
+    publisher = DryRunUnitreeCommandPublisher()
+    adapter = UnitreeAdapter(
+        UnitreeAdapterConfig(
+            network_interface="eth0",
+            sdk_module="unitree_sdk_for_test",
+            command_transport="dry_run",
+        ),
+        publisher=publisher,
+    )
+
+    await adapter.connect()
+    try:
+        state = await adapter.get_state()
+        assert state.connected is True
+        assert state.estop_engaged is False
+        assert state.pose_label == "unitree-dry_run"
+    finally:
+        await adapter.disconnect()

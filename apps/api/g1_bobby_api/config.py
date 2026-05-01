@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     unitree_network_interface: str | None = None
     unitree_sdk_module: str = Field(default="unitree_sdk2py", min_length=1)
     unitree_enable_motor_commands: bool = False
+    unitree_command_transport: str = Field(default="disabled", min_length=1)
     unitree_state_cache_path: Path = Path(".runtime/unitree_state.json")
     unitree_command_plan_cache_path: Path = Path(".runtime/unitree_command_plans.jsonl")
     rejected_command_cache_path: Path = Path(".runtime/rejected_commands.jsonl")
@@ -52,6 +53,7 @@ class Settings(BaseSettings):
             network_interface=self.unitree_network_interface,
             sdk_module=self.unitree_sdk_module,
             enable_motor_commands=self.unitree_enable_motor_commands,
+            command_transport=self.unitree_command_transport,
         )
 
     def safety_limits(self) -> SafetyLimits:

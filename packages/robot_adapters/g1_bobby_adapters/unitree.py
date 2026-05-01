@@ -7,6 +7,13 @@ from time import time
 from g1_bobby_contracts.commands import CommandEnvelope
 from g1_bobby_contracts.state import ControlMode, RobotState
 
+from .unitree_transport import (
+    DisabledUnitreeCommandPublisher,
+    DryRunUnitreeCommandPublisher,
+    UnitreeCommandPublisher,
+    UnitreeTransportConfigurationError,
+)
+
 
 class UnitreeAdapterError(RuntimeError):
     """Base error for the Unitree adapter boundary."""
@@ -21,6 +28,7 @@ class UnitreeAdapterConfig:
     network_interface: str | None = None
     sdk_module: str = "unitree_sdk2py"
     enable_motor_commands: bool = False
+    command_transport: str = "disabled"
 
 
 class UnitreeAdapter:
@@ -31,8 +39,14 @@ class UnitreeAdapter:
     Unitree SDK or ROS2 transport binding is implemented and reviewed.
     """
 
-    def __init__(self, config: UnitreeAdapterConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: UnitreeAdapterConfig | None = None,
+        *,
+        publisher: UnitreeCommandPublisher | None = None,
+    ) -> None:
         self.config = config or UnitreeAdapterConfig()
+        self._publisher = publisher or self._create_publisher(self.config.command_transport)
         self._state = RobotState(
             connected=False,
             estop_engaged=True,
@@ -43,6 +57,14 @@ class UnitreeAdapter:
             last_heartbeat_at=None,
             pose_label="unitree-disconnected",
         )
+
+    def _create_publisher(self, transport: str) -> UnitreeCommandPublisher:
+        normalized = transport.lower()
+        if normalized == "disabled":
+            return DisabledUnitreeCommandPublisher()
+        if normalized == "dry_run":
+            return DryRunUnitreeCommandPublisher()
+        raise UnitreeAdapterConfigurationError(f"unsupported Unitree command transport: {transport}")
 
     async def connect(self) -> None:
         if not self.config.network_interface:
@@ -59,16 +81,19 @@ class UnitreeAdapter:
                     f"Unitree SDK module '{self.config.sdk_module}' is not installed"
                 ) from exc
             raise
-
-        raise UnitreeAdapterConfigurationError(
-            "Unitree SDK import succeeded, but the hardware transport binding is "
-            "not implemented yet; keep G1_BOBBY_ROBOT_ADAPTER=mock until the "
-            "real bridge is wired"
-        )
+        await self._publisher.connect()
+        self._state.connected = True
+        self._state.estop_engaged = False
+        self._state.mode = ControlMode.IDLE
+        self._state.pose_label = f"unitree-{self.config.command_transport}"
+        self._state.last_state_at = time()
 
     async def disconnect(self) -> None:
+        await self._publisher.disconnect()
         self._state.connected = False
+        self._state.estop_engaged = True
         self._state.mode = ControlMode.IDLE
+        self._state.pose_label = "unitree-disconnected"
         self._state.last_state_at = time()
 
     async def get_state(self) -> RobotState:
@@ -80,10 +105,18 @@ class UnitreeAdapter:
             raise UnitreeAdapterConfigurationError(
                 f"motor command execution is disabled for Unitree adapter: {command.type}"
             )
+        try:
+            await self._publisher.publish(command)
+        except UnitreeTransportConfigurationError as exc:
+            raise UnitreeAdapterConfigurationError(str(exc)) from exc
 
-        raise UnitreeAdapterConfigurationError(
-            "Unitree motor command binding is not implemented yet"
-        )
+        if str(command.type) == "heartbeat":
+            self._state.last_heartbeat_at = command.timestamp
+        elif str(command.type) == "set_mode":
+            self._state.mode = ControlMode(command.payload.mode)
+        elif str(command.type) == "stop":
+            self._state.mode = ControlMode.IDLE
+        self._state.last_state_at = time()
 
     async def emergency_stop(self) -> None:
         self._state.estop_engaged = True
