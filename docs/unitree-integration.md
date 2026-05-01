@@ -67,8 +67,12 @@ The image is based on Ubuntu 22.04 / ROS2 Humble and builds:
 
 - CycloneDDS `releases/0.10.x`
 - Unitree ROS2 packages from `unitreerobotics/unitree_ros2`
+- Unitree SDK2 C++ from `unitreerobotics/unitree_sdk2`
 - Unitree SDK2 Python from `unitreerobotics/unitree_sdk2_python`
+- Unitree MuJoCo simulator from `unitreerobotics/unitree_mujoco`
+- MuJoCo `3.3.6` from Google DeepMind releases
 - `g1-bobby-unitree-probe`
+- `g1-bobby-unitree-sim`
 
 Local-only probe:
 
@@ -88,3 +92,40 @@ docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
 In WSL2, `eth0` is usually a NAT interface. DDS multicast to a physical robot
 may require WSL mirrored networking, a bridged adapter setup, or running this
 container on a native Linux host connected to the robot network.
+
+## Unitree MuJoCo Simulator
+
+Use the official Unitree MuJoCo simulator first for local G1 integration:
+
+```bash
+docker compose -f compose.unitree.yml --profile sim build unitree-sim
+docker compose -f compose.unitree.yml --profile sim run --rm unitree-sim \
+  g1-bobby-unitree-sim --dry-run
+docker compose -f compose.unitree.yml --profile sim run --rm unitree-sim
+```
+
+The launcher defaults to:
+
+```text
+G1_BOBBY_UNITREE_DDS_INTERFACE=lo
+G1_BOBBY_UNITREE_DDS_DOMAIN_ID=1
+G1_BOBBY_UNITREE_SIM_ROBOT=g1
+G1_BOBBY_UNITREE_SIM_SCENE=scene_29dof.xml
+```
+
+Override the scene when needed:
+
+```bash
+G1_BOBBY_UNITREE_SIM_SCENE=scene.xml \
+docker compose -f compose.unitree.yml --profile sim run --rm unitree-sim
+```
+
+WSLg GUI forwarding uses the host `DISPLAY`, `WAYLAND_DISPLAY`, `/tmp/.X11-unix`,
+and `/mnt/wslg` mounts configured in `compose.unitree.yml`.
+
+When using `lo`, CycloneDDS may warn that loopback is not multicast-capable and
+then disable multicast. That is acceptable for local simulator smoke tests.
+
+The RTX 3070 is useful for the heavier Unitree IsaacLab path, but that is a
+separate GPU simulator stack that needs NVIDIA container runtime, Isaac Sim, and
+larger assets. Keep MuJoCo as the baseline before adding IsaacLab.

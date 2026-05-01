@@ -77,6 +77,34 @@ docker compose -f compose.unitree.yml --profile unitree build unitree-ros2
 docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2
 ```
 
+## Unitree MuJoCo Simulator
+
+The same Unitree container also builds the official `unitree_mujoco` simulator
+with G1 defaults:
+
+```bash
+docker compose -f compose.unitree.yml --profile sim build unitree-sim
+docker compose -f compose.unitree.yml --profile sim run --rm unitree-sim \
+  g1-bobby-unitree-sim --dry-run
+docker compose -f compose.unitree.yml --profile sim run --rm unitree-sim
+```
+
+Defaults:
+
+```text
+G1_BOBBY_UNITREE_DDS_INTERFACE=lo
+G1_BOBBY_UNITREE_DDS_DOMAIN_ID=1
+G1_BOBBY_UNITREE_SIM_ROBOT=g1
+G1_BOBBY_UNITREE_SIM_SCENE=scene_29dof.xml
+```
+
+WSLg should provide `DISPLAY`, `WAYLAND_DISPLAY`, and `/mnt/wslg`. RTX GPU
+acceleration is more relevant for the heavier IsaacLab path; MuJoCo is the
+baseline simulator for local integration.
+
+The local `lo` interface can print a CycloneDDS multicast warning during smoke
+tests; that is expected for this local simulator path.
+
 Default DDS interface is `lo` for local probing. When a real robot or simulator
 network is reachable, set the DDS interface explicitly:
 

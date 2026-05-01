@@ -7,7 +7,10 @@ services:
       dockerfile: docker/unitree-ros2/Dockerfile
       args:
         UNITREE_ROS2_REF: ${UNITREE_ROS2_REF:-master}
+        UNITREE_SDK2_REF: ${UNITREE_SDK2_REF:-main}
         UNITREE_SDK2_PYTHON_REF: ${UNITREE_SDK2_PYTHON_REF:-master}
+        UNITREE_MUJOCO_REF: ${UNITREE_MUJOCO_REF:-main}
+        MUJOCO_VERSION: ${MUJOCO_VERSION:-3.3.6}
         CYCLONEDDS_REF: ${CYCLONEDDS_REF:-releases/0.10.x}
     image: g1-bobby-unitree-ros2:humble
     network_mode: host
@@ -22,3 +25,39 @@ services:
       - .:/workspace/g1-bobby
     working_dir: /workspace/g1-bobby
     command: g1-bobby-unitree-probe
+
+  unitree-sim:
+    profiles:
+      - unitree
+      - sim
+    build:
+      context: .
+      dockerfile: docker/unitree-ros2/Dockerfile
+      args:
+        UNITREE_ROS2_REF: ${UNITREE_ROS2_REF:-master}
+        UNITREE_SDK2_REF: ${UNITREE_SDK2_REF:-main}
+        UNITREE_SDK2_PYTHON_REF: ${UNITREE_SDK2_PYTHON_REF:-master}
+        UNITREE_MUJOCO_REF: ${UNITREE_MUJOCO_REF:-main}
+        MUJOCO_VERSION: ${MUJOCO_VERSION:-3.3.6}
+        CYCLONEDDS_REF: ${CYCLONEDDS_REF:-releases/0.10.x}
+    image: g1-bobby-unitree-ros2:humble
+    network_mode: host
+    ipc: host
+    environment:
+      DISPLAY: ${DISPLAY:-:0}
+      WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-wayland-0}
+      XDG_RUNTIME_DIR: ${G1_BOBBY_WSLG_RUNTIME_DIR:-/mnt/wslg/runtime-dir}
+      PULSE_SERVER: ${PULSE_SERVER:-unix:/mnt/wslg/PulseServer}
+      G1_BOBBY_UNITREE_DDS_INTERFACE: ${G1_BOBBY_UNITREE_DDS_INTERFACE:-lo}
+      G1_BOBBY_UNITREE_DDS_DOMAIN_ID: ${G1_BOBBY_UNITREE_DDS_DOMAIN_ID:-1}
+      G1_BOBBY_UNITREE_SIM_ROBOT: ${G1_BOBBY_UNITREE_SIM_ROBOT:-g1}
+      G1_BOBBY_UNITREE_SIM_SCENE: ${G1_BOBBY_UNITREE_SIM_SCENE:-scene_29dof.xml}
+      G1_BOBBY_UNITREE_SDK_MODULE: ${G1_BOBBY_UNITREE_SDK_MODULE:-unitree_sdk2py}
+      MUJOCO_GL: ${MUJOCO_GL:-glfw}
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+    volumes:
+      - .:/workspace/g1-bobby
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /mnt/wslg:/mnt/wslg:rw
+    working_dir: /workspace/g1-bobby
+    command: g1-bobby-unitree-sim
