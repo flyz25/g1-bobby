@@ -6,6 +6,7 @@ from typing import Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from .state import RobotState
+from .unitree import UnitreeDdsSnapshot
 
 
 class ServerEventType(StrEnum):
@@ -49,6 +50,7 @@ class StateEvent(BaseModel):
 
     type: Literal[ServerEventType.STATE] = ServerEventType.STATE
     state: RobotState
+    unitree_state: UnitreeDdsSnapshot | None = None
 
 
 class TelemetryEvent(BaseModel):
@@ -58,6 +60,7 @@ class TelemetryEvent(BaseModel):
     state: RobotState
     accepted_commands: int = Field(ge=0)
     rejected_commands: int = Field(ge=0)
+    unitree_state: UnitreeDdsSnapshot | None = None
 
 
 ServerEvent = Union[AckEvent, RejectEvent, StateEvent, TelemetryEvent]

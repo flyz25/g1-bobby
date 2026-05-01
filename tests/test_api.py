@@ -103,6 +103,28 @@ def test_websocket_rejects_invalid_token() -> None:
             assert event["code"] == "auth_failed"
 
 
+def test_websocket_state_and_telemetry_include_unitree_snapshot() -> None:
+    settings = Settings(_env_file=None, telemetry_interval_s=0.01)
+    with TestClient(create_app(settings)) as client:
+        accepted = client.post(
+            "/unitree/state",
+            json=UNITREE_SNAPSHOT,
+            headers={"X-Operator-Token": "dev-operator-token"},
+        )
+        assert accepted.status_code == 200
+
+        with client.websocket_connect("/ws/operator?token=dev-operator-token") as websocket:
+            state_event = websocket.receive_json()
+            assert state_event["type"] == "state"
+            assert state_event["unitree_state"]["status"] == "receiving"
+            assert state_event["unitree_state"]["low_state"]["motor_count"] == 35
+
+            telemetry_event = websocket.receive_json()
+            assert telemetry_event["type"] == "telemetry"
+            assert telemetry_event["unitree_state"]["sample_counts"]["low_state"] == 1
+            assert telemetry_event["unitree_state"]["sport_mode_state"]["position"][2] == 1.2
+
+
 def test_websocket_rejects_movement_before_ready() -> None:
     with TestClient(create_app(Settings(_env_file=None))) as client:
         with client.websocket_connect("/ws/operator?token=dev-operator-token") as websocket:

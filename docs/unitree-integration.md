@@ -122,6 +122,9 @@ docker compose -f compose.unitree.yml --profile sim run --rm unitree-listen \
 curl http://127.0.0.1:8010/unitree/state
 ```
 
+The same cached snapshot is also attached to operator WebSocket `state` and
+`telemetry` events as `unitree_state`.
+
 The launcher defaults to:
 
 ```text

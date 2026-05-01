@@ -26,6 +26,24 @@ async def send_event(websocket: WebSocket, event: object) -> None:
     await websocket.send_text(event.model_dump_json())
 
 
+async def current_state_event(websocket: WebSocket) -> StateEvent:
+    runtime = websocket.app.state.runtime
+    return StateEvent(
+        state=await runtime.adapter.get_state(),
+        unitree_state=await runtime.get_unitree_state(),
+    )
+
+
+async def current_telemetry_event(websocket: WebSocket) -> TelemetryEvent:
+    runtime = websocket.app.state.runtime
+    return TelemetryEvent(
+        state=await runtime.adapter.get_state(),
+        accepted_commands=runtime.accepted_commands,
+        rejected_commands=runtime.rejected_commands,
+        unitree_state=await runtime.get_unitree_state(),
+    )
+
+
 @router.websocket("/ws/operator")
 async def operator_socket(websocket: WebSocket) -> None:
     token = websocket.query_params.get("token")
@@ -60,7 +78,7 @@ async def operator_socket(websocket: WebSocket) -> None:
     telemetry_task = asyncio.create_task(send_telemetry(websocket))
 
     try:
-        await send_event(websocket, StateEvent(state=await runtime.adapter.get_state()))
+        await send_event(websocket, await current_state_event(websocket))
         while True:
             message = await websocket.receive_json()
             try:
@@ -131,14 +149,6 @@ async def operator_socket(websocket: WebSocket) -> None:
 
 async def send_telemetry(websocket: WebSocket) -> None:
     settings = websocket.app.state.settings
-    runtime = websocket.app.state.runtime
     while True:
         await asyncio.sleep(settings.telemetry_interval_s)
-        await send_event(
-            websocket,
-            TelemetryEvent(
-                state=await runtime.adapter.get_state(),
-                accepted_commands=runtime.accepted_commands,
-                rejected_commands=runtime.rejected_commands,
-            ),
-        )
+        await send_event(websocket, await current_telemetry_event(websocket))
