@@ -50,7 +50,7 @@ class MockRobotAdapter:
             return
 
         if command.type == CommandType.STOP:
-            self._state.mode = ControlMode.MANUAL
+            self._state.mode = ControlMode.IDLE
             return
 
         if command.type == CommandType.ESTOP:
@@ -68,4 +68,3 @@ class MockRobotAdapter:
         self._state.mode = ControlMode.IDLE
         self._state.last_state_at = time()
         return True
-

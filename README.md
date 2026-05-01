@@ -29,6 +29,13 @@ Runtime status:
 http://localhost:8010/runtime
 ```
 
+Resetting e-stop over HTTP requires the operator token:
+
+```bash
+curl -X POST http://localhost:8010/reset-estop \
+  -H "X-Operator-Token: dev-operator-token"
+```
+
 Run tests with Docker:
 
 ```bash

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from typing import Annotated
 from typing import Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from g1_bobby_contracts.events import StateEvent
@@ -69,7 +70,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return StateEvent(state=robot_state)
 
     @app.post("/reset-estop")
-    async def reset_estop() -> StateEvent:
+    async def reset_estop(
+        x_operator_token: Annotated[str | None, Header(alias="X-Operator-Token")] = None,
+    ) -> StateEvent:
+        if x_operator_token != app.state.settings.operator_token:
+            raise HTTPException(status_code=401, detail="invalid operator token")
+
         reset = await app.state.runtime.adapter.reset_emergency_stop()
         if not reset:
             raise HTTPException(status_code=409, detail="robot is not connected")

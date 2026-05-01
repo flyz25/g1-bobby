@@ -32,9 +32,19 @@ def test_estop_and_reset_estop() -> None:
         assert estop.status_code == 200
         assert estop.json()["state"]["estop_engaged"] is True
 
-        reset = client.post("/reset-estop")
+        reset = client.post(
+            "/reset-estop",
+            headers={"X-Operator-Token": "dev-operator-token"},
+        )
         assert reset.status_code == 200
         assert reset.json()["state"]["estop_engaged"] is False
+
+
+def test_reset_estop_requires_operator_token() -> None:
+    with TestClient(create_app(Settings(_env_file=None))) as client:
+        reset = client.post("/reset-estop")
+        assert reset.status_code == 401
+        assert reset.json()["detail"] == "invalid operator token"
 
 
 def test_websocket_rejects_invalid_token() -> None:
