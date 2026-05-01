@@ -58,6 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Persist the highest seen audit event_id and reuse it on reconnect",
     )
     parser.add_argument(
+        "--resume-reset",
+        action="store_true",
+        help="Ignore any saved resume-file cursor and start audit replay from --after-id",
+    )
+    parser.add_argument(
         "--watch",
         action="store_true",
         help="Reconnect automatically after disconnect or connect failure",
@@ -394,6 +399,14 @@ def load_resume_after_id(path: Path | None) -> int:
     return max(value, 0)
 
 
+def initialize_resume_after_id(args: argparse.Namespace) -> int:
+    if args.resume_reset:
+        if args.resume_file is not None:
+            persist_resume_after_id(args.resume_file, max(args.after_id, 0))
+        return max(args.after_id, 0)
+    return load_resume_after_id(args.resume_file)
+
+
 def persist_resume_after_id(path: Path | None, after_id: int) -> None:
     if path is None:
         return
@@ -441,13 +454,18 @@ def update_resume_checkpoint(args: argparse.Namespace, raw_text: str) -> None:
 
 
 async def run(args: argparse.Namespace) -> int:
-    args._resume_after_id = load_resume_after_id(args.resume_file)
+    args._resume_after_id = initialize_resume_after_id(args)
     outbound_messages = build_outbound_messages(args)
     replay_on_retry = should_replay_messages(args)
 
     while True:
         try:
             url = attach_token(resolve_ws_url(args), args.token)
+            if args.audit_stream:
+                print(
+                    f"operator cli audit cursor after_id={current_after_id(args)}",
+                    file=sys.stderr,
+                )
             async with websockets.connect(url, open_timeout=args.timeout_s) as websocket:
                 first_event = await receive_event(websocket, args.timeout_s)
                 update_resume_checkpoint(args, first_event)

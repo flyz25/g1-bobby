@@ -9,6 +9,7 @@ from g1_bobby_operator_cli.main import (
     effective_listen_s,
     extract_event_id,
     format_event,
+    initialize_resume_after_id,
     load_resume_after_id,
     persist_resume_after_id,
     current_after_id,
@@ -217,6 +218,23 @@ def test_resume_checkpoint_round_trip(tmp_path: Path) -> None:
     assert load_resume_after_id(resume_file) == 0
     persist_resume_after_id(resume_file, 9)
     assert load_resume_after_id(resume_file) == 9
+
+
+def test_initialize_resume_after_id_uses_resume_file_by_default(tmp_path: Path) -> None:
+    resume_file = tmp_path / "audit-resume.json"
+    persist_resume_after_id(resume_file, 9)
+    args = argparse.Namespace(after_id=4, resume_file=resume_file, resume_reset=False)
+
+    assert initialize_resume_after_id(args) == 9
+
+
+def test_initialize_resume_after_id_can_reset_resume_file(tmp_path: Path) -> None:
+    resume_file = tmp_path / "audit-resume.json"
+    persist_resume_after_id(resume_file, 9)
+    args = argparse.Namespace(after_id=4, resume_file=resume_file, resume_reset=True)
+
+    assert initialize_resume_after_id(args) == 4
+    assert load_resume_after_id(resume_file) == 4
 
 
 def test_build_outbound_messages_uses_telemetry_only_mode() -> None:
