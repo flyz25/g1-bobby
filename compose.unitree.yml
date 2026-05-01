@@ -63,3 +63,23 @@ services:
       - /mnt/wslg:/mnt/wslg:rw
     working_dir: /workspace/g1-bobby
     command: g1-bobby-unitree-sim
+
+  unitree-listen:
+    profiles:
+      - unitree
+      - sim
+    image: g1-bobby-unitree-ros2:humble
+    network_mode: host
+    ipc: host
+    environment:
+      G1_BOBBY_UNITREE_DDS_INTERFACE: ${G1_BOBBY_UNITREE_DDS_INTERFACE:-lo}
+      G1_BOBBY_UNITREE_DDS_DOMAIN_ID: ${G1_BOBBY_UNITREE_DDS_DOMAIN_ID:-1}
+      G1_BOBBY_UNITREE_SIM_ROBOT: ${G1_BOBBY_UNITREE_SIM_ROBOT:-g1}
+      G1_BOBBY_UNITREE_LISTEN_SAMPLE_INTERVAL_S: ${G1_BOBBY_UNITREE_LISTEN_SAMPLE_INTERVAL_S:-1}
+      G1_BOBBY_UNITREE_LISTEN_MAX_MOTORS: ${G1_BOBBY_UNITREE_LISTEN_MAX_MOTORS:-6}
+      G1_BOBBY_UNITREE_SDK_MODULE: ${G1_BOBBY_UNITREE_SDK_MODULE:-unitree_sdk2py}
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+    volumes:
+      - .:/workspace/g1-bobby
+    working_dir: /workspace/g1-bobby
+    command: g1-bobby-unitree-listen

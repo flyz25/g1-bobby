@@ -109,6 +109,13 @@ RUN printf '%s\n' \
 RUN printf '%s\n' \
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
+    'python3 -m g1_bobby_unitree_bridge.listener "$@"' \
+    > /usr/local/bin/g1-bobby-unitree-listen \
+    && chmod +x /usr/local/bin/g1-bobby-unitree-listen
+
+RUN printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
     'python3 -m g1_bobby_unitree_bridge.sim "$@"' \
     > /usr/local/bin/g1-bobby-unitree-sim \
     && chmod +x /usr/local/bin/g1-bobby-unitree-sim

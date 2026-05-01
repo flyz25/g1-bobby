@@ -72,6 +72,7 @@ The image is based on Ubuntu 22.04 / ROS2 Humble and builds:
 - Unitree MuJoCo simulator from `unitreerobotics/unitree_mujoco`
 - MuJoCo `3.3.6` from Google DeepMind releases
 - `g1-bobby-unitree-probe`
+- `g1-bobby-unitree-listen`
 - `g1-bobby-unitree-sim`
 
 Local-only probe:
@@ -104,6 +105,14 @@ docker compose -f compose.unitree.yml --profile sim run --rm unitree-sim \
 docker compose -f compose.unitree.yml --profile sim run --rm unitree-sim
 ```
 
+Read-only DDS state listener, from a second terminal while the simulator is
+running:
+
+```bash
+docker compose -f compose.unitree.yml --profile sim run --rm unitree-listen \
+  g1-bobby-unitree-listen --duration 5 --require-samples
+```
+
 The launcher defaults to:
 
 ```text
@@ -113,6 +122,8 @@ G1_BOBBY_UNITREE_SIM_ROBOT=g1
 G1_BOBBY_UNITREE_SIM_SCENE=scene_29dof.xml
 G1_BOBBY_UNITREE_SIM_ELASTIC_BAND=true
 G1_BOBBY_UNITREE_SIM_PRINT_SCENE_INFO=false
+G1_BOBBY_UNITREE_LISTEN_SAMPLE_INTERVAL_S=1
+G1_BOBBY_UNITREE_LISTEN_MAX_MOTORS=6
 ```
 
 Override the scene when needed:
