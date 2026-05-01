@@ -122,8 +122,10 @@ docker compose -f compose.unitree.yml --profile sim run --rm unitree-listen \
 curl http://127.0.0.1:8010/unitree/state
 ```
 
-The same cached snapshot is also attached to operator WebSocket `state` and
-`telemetry` events as `unitree_state`.
+The same cached snapshot is also attached to HTTP `/state` plus operator
+WebSocket `state` and `telemetry` events as `unitree_state`. Those state
+surfaces also expose a read-only projected `pose_label` derived from the latest
+Unitree sport-mode position when available.
 
 The launcher defaults to:
 

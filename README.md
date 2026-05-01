@@ -146,8 +146,9 @@ Endpoint:
 ws://localhost:8010/ws/operator?token=dev-operator-token
 ```
 
-When `/unitree/state` has recent data, operator `state` and `telemetry` events
-also carry the latest cached `unitree_state` snapshot.
+When `/unitree/state` has recent data, the HTTP `/state` response plus operator
+`state` and `telemetry` events use a read-only Unitree-backed pose projection
+and also carry the latest cached `unitree_state` snapshot.
 
 See [docs/protocol.md](docs/protocol.md) and [samples/operator_messages.jsonl](samples/operator_messages.jsonl).
 

@@ -62,8 +62,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/state")
     async def state() -> StateEvent:
-        robot_state = await app.state.runtime.adapter.get_state()
-        return StateEvent(state=robot_state)
+        robot_state = await app.state.runtime.get_display_state()
+        return StateEvent(
+            state=robot_state,
+            unitree_state=await app.state.runtime.get_unitree_state(),
+        )
 
     @app.get("/unitree/state")
     async def unitree_state() -> UnitreeDdsSnapshot:
@@ -90,8 +93,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/estop")
     async def estop() -> StateEvent:
         await app.state.runtime.adapter.emergency_stop()
-        robot_state = await app.state.runtime.adapter.get_state()
-        return StateEvent(state=robot_state)
+        robot_state = await app.state.runtime.get_display_state()
+        return StateEvent(
+            state=robot_state,
+            unitree_state=await app.state.runtime.get_unitree_state(),
+        )
 
     @app.post("/reset-estop")
     async def reset_estop(
@@ -103,8 +109,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         reset = await app.state.runtime.adapter.reset_emergency_stop()
         if not reset:
             raise HTTPException(status_code=409, detail="robot is not connected")
-        robot_state = await app.state.runtime.adapter.get_state()
-        return StateEvent(state=robot_state)
+        robot_state = await app.state.runtime.get_display_state()
+        return StateEvent(
+            state=robot_state,
+            unitree_state=await app.state.runtime.get_unitree_state(),
+        )
 
     return app
 

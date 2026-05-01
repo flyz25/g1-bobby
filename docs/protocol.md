@@ -145,4 +145,5 @@ Reject codes:
 State events include current robot state. Telemetry also includes accepted and rejected command counters.
 When the API has cached a Unitree DDS snapshot, both events also include an
 optional `unitree_state` object with the latest simulator or robot read-only
-state summary.
+state summary, and their `state.pose_label` reflects a read-only Unitree pose
+projection.

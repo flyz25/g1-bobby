@@ -91,6 +91,11 @@ def test_unitree_state_ingest_and_readback() -> None:
         assert readback.status_code == 200
         assert readback.json()["low_state"]["motor_count"] == 35
 
+        projected_state = client.get("/state")
+        assert projected_state.status_code == 200
+        assert projected_state.json()["state"]["pose_label"] == "unitree-g1 x=0.00 y=0.00 z=1.20"
+        assert projected_state.json()["unitree_state"]["status"] == "receiving"
+
         runtime = client.get("/runtime")
         assert runtime.json()["unitree_state"]["updates"] == 1
 
@@ -116,11 +121,13 @@ def test_websocket_state_and_telemetry_include_unitree_snapshot() -> None:
         with client.websocket_connect("/ws/operator?token=dev-operator-token") as websocket:
             state_event = websocket.receive_json()
             assert state_event["type"] == "state"
+            assert state_event["state"]["pose_label"] == "unitree-g1 x=0.00 y=0.00 z=1.20"
             assert state_event["unitree_state"]["status"] == "receiving"
             assert state_event["unitree_state"]["low_state"]["motor_count"] == 35
 
             telemetry_event = websocket.receive_json()
             assert telemetry_event["type"] == "telemetry"
+            assert telemetry_event["state"]["pose_label"] == "unitree-g1 x=0.00 y=0.00 z=1.20"
             assert telemetry_event["unitree_state"]["sample_counts"]["low_state"] == 1
             assert telemetry_event["unitree_state"]["sport_mode_state"]["position"][2] == 1.2
 

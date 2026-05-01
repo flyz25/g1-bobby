@@ -29,7 +29,7 @@ async def send_event(websocket: WebSocket, event: object) -> None:
 async def current_state_event(websocket: WebSocket) -> StateEvent:
     runtime = websocket.app.state.runtime
     return StateEvent(
-        state=await runtime.adapter.get_state(),
+        state=await runtime.get_display_state(),
         unitree_state=await runtime.get_unitree_state(),
     )
 
@@ -37,7 +37,7 @@ async def current_state_event(websocket: WebSocket) -> StateEvent:
 async def current_telemetry_event(websocket: WebSocket) -> TelemetryEvent:
     runtime = websocket.app.state.runtime
     return TelemetryEvent(
-        state=await runtime.adapter.get_state(),
+        state=await runtime.get_display_state(),
         accepted_commands=runtime.accepted_commands,
         rejected_commands=runtime.rejected_commands,
         unitree_state=await runtime.get_unitree_state(),
