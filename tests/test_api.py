@@ -455,6 +455,59 @@ def test_plan_stub_execution_plan_endpoints_and_audit_stream(tmp_path: Path) -> 
         assert runtime.json()["unitree_execution_result"]["results"] == 1
 
 
+def test_execution_failure_records_blocked_execution_result(tmp_path: Path) -> None:
+    import sys
+    from types import SimpleNamespace
+
+    settings = build_settings(
+        tmp_path,
+        robot_adapter="unitree",
+        unitree_network_interface="eth0",
+        unitree_sdk_module="unitree_sdk_for_test",
+        unitree_enable_motor_commands=True,
+        unitree_command_transport="disabled",
+    )
+    sys.modules["unitree_sdk_for_test"] = SimpleNamespace()
+
+    try:
+        with TestClient(create_app(settings)) as client:
+            with client.websocket_connect("/ws/operator?token=dev-operator-token") as operator:
+                assert operator.receive_json()["type"] == "state"
+                operator.send_json(
+                    {
+                        "type": "set_mode",
+                        "seq": 1,
+                        "timestamp": time(),
+                        "payload": {"mode": "manual"},
+                    }
+                )
+                reject = operator.receive_json()
+                assert reject["type"] == "reject"
+                assert reject["code"] == "execution_failed"
+
+                with client.websocket_connect("/ws/operator/audit?token=dev-operator-token") as audit:
+                    first = audit.receive_json()
+                    second = audit.receive_json()
+                    assert {first["type"], second["type"]} == {"execution_result", "rejected_command"}
+                    execution_result_event = first if first["type"] == "execution_result" else second
+                    assert execution_result_event["unitree_execution_result"]["execution_result"]["status"] == "blocked"
+                    assert execution_result_event["unitree_execution_result"]["execution_result"]["transport"] == "disabled"
+
+            latest = client.get("/unitree/execution-result")
+            assert latest.status_code == 200
+            assert latest.json()["execution_result"]["status"] == "blocked"
+            assert latest.json()["execution_result"]["transport"] == "disabled"
+            assert latest.json()["execution_result"]["command_type"] == "set_mode"
+
+            runtime = client.get("/runtime")
+            assert runtime.status_code == 200
+            assert runtime.json()["unitree_execution_result"]["available"] is True
+            assert runtime.json()["unitree_execution_result"]["results"] == 1
+            assert runtime.json()["rejected_command"]["records"] == 1
+    finally:
+        sys.modules.pop("unitree_sdk_for_test", None)
+
+
 def test_unitree_command_plan_missing_before_any_accept(tmp_path: Path) -> None:
     with TestClient(create_app(build_settings(tmp_path))) as client:
         response = client.get("/unitree/command-plan")

@@ -122,6 +122,11 @@ async def operator_socket(websocket: WebSocket) -> None:
             try:
                 await runtime.adapter.execute(command)
             except Exception as exc:  # pragma: no cover - future real adapter boundary
+                consume_execution_result = getattr(runtime.adapter, "consume_last_execution_result", None)
+                if callable(consume_execution_result):
+                    execution_result = consume_execution_result()
+                    if execution_result is not None:
+                        await runtime.record_unitree_execution_result(execution_result)
                 reject_event = RejectEvent(
                     seq=command.seq,
                     code=ErrorCode.EXECUTION_FAILED,

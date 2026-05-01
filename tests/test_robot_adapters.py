@@ -231,6 +231,37 @@ async def test_unitree_sdk_real_transport_reports_unimplemented_after_sdk_import
         await adapter.connect()
 
 
+async def test_unitree_disabled_transport_records_blocked_execution_result(monkeypatch) -> None:
+    monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
+    adapter = UnitreeAdapter(
+        UnitreeAdapterConfig(
+            network_interface="eth0",
+            sdk_module="unitree_sdk_for_test",
+            enable_motor_commands=True,
+            command_transport="disabled",
+        ),
+    )
+    await adapter.connect()
+    try:
+        with pytest.raises(UnitreeAdapterConfigurationError, match="transport is disabled"):
+            await adapter.execute(
+                SetModeCommand(
+                    type=CommandType.SET_MODE,
+                    seq=1,
+                    timestamp=time(),
+                    payload=SetModePayload(mode="manual"),
+                )
+            )
+        result = adapter.consume_last_execution_result()
+        assert result is not None
+        assert result.transport == "disabled"
+        assert result.command_type == "set_mode"
+        assert result.status == "blocked"
+        assert result.target == "disabled"
+    finally:
+        await adapter.disconnect()
+
+
 def test_describe_unitree_transport_capability_reports_real_transport_blockers(monkeypatch) -> None:
     monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
     monkeypatch.setitem(__import__("sys").modules, "rclpy", SimpleNamespace())

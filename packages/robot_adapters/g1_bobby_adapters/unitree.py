@@ -159,6 +159,29 @@ class UnitreeAdapter:
             )
         raise UnitreeAdapterConfigurationError(f"unsupported Unitree command transport: {transport}")
 
+    def _infer_blocked_target(self, command: CommandEnvelope) -> str:
+        transport = self.config.command_transport.lower()
+        if transport == "ros2_real":
+            module = import_module("g1_bobby_unitree_bridge.publisher_ros2")
+            plan = module.build_ros2_publish_plan(command)
+            if plan is not None:
+                return str(plan.topic)
+        if transport == "sdk_real":
+            module = import_module("g1_bobby_unitree_bridge.publisher_sdk")
+            plan = module.build_sdk_publish_plan(command)
+            if plan is not None:
+                return str(plan.binding_target)
+        return transport
+
+    def _set_blocked_execution_result(self, command: CommandEnvelope, detail: str) -> None:
+        self._last_execution_result = UnitreeExecutionResult(
+            transport=self.config.command_transport.lower(),
+            command_type=str(command.type),
+            status="blocked",
+            target=self._infer_blocked_target(command),
+            detail=detail,
+        )
+
     async def connect(self) -> None:
         if not self.config.network_interface:
             raise UnitreeAdapterConfigurationError(
@@ -198,12 +221,13 @@ class UnitreeAdapter:
 
     async def execute(self, command: CommandEnvelope) -> None:
         if not self.config.enable_motor_commands:
-            raise UnitreeAdapterConfigurationError(
-                f"motor command execution is disabled for Unitree adapter: {command.type}"
-            )
+            detail = f"motor command execution is disabled for Unitree adapter: {command.type}"
+            self._set_blocked_execution_result(command, detail)
+            raise UnitreeAdapterConfigurationError(detail)
         try:
             await self._publisher.publish(command)
         except UnitreeTransportConfigurationError as exc:
+            self._set_blocked_execution_result(command, str(exc))
             raise UnitreeAdapterConfigurationError(str(exc)) from exc
         self._last_execution_plan = None
         self._last_execution_result = None
