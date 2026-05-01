@@ -126,6 +126,14 @@ def test_websocket_rejects_invalid_token(tmp_path: Path) -> None:
             assert event["code"] == "auth_failed"
 
 
+def test_audit_websocket_rejects_invalid_token(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path))) as client:
+        with client.websocket_connect("/ws/operator/audit?token=bad") as websocket:
+            event = websocket.receive_json()
+            assert event["type"] == "reject"
+            assert event["code"] == "auth_failed"
+
+
 def test_unitree_state_is_restored_after_app_restart(tmp_path: Path) -> None:
     settings = build_settings(tmp_path)
     with TestClient(create_app(settings)) as client:
@@ -410,6 +418,63 @@ def test_unitree_command_plan_history_is_restored_after_app_restart(tmp_path: Pa
         assert runtime.json()["unitree_command_plan"]["last_recorded_at"] is not None
         assert runtime.json()["unitree_command_plan"]["source"] == "restored"
         assert runtime.json()["unitree_command_plan"]["stale"] is False
+
+
+def test_audit_websocket_replays_history_and_streams_live_updates(tmp_path: Path) -> None:
+    settings = build_settings(tmp_path, unitree_command_plan_history_size=2)
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/operator?token=dev-operator-token") as operator:
+            assert operator.receive_json()["type"] == "state"
+            operator.send_json(
+                {
+                    "type": "heartbeat",
+                    "seq": 1,
+                    "timestamp": time(),
+                    "payload": {"client_id": "quest-dev"},
+                }
+            )
+            operator.receive_json()
+            operator.send_json(
+                {
+                    "type": "set_mode",
+                    "seq": 2,
+                    "timestamp": time(),
+                    "payload": {"mode": "manual"},
+                }
+            )
+            operator.receive_json()
+
+            with client.websocket_connect("/ws/operator/audit?token=dev-operator-token") as audit:
+                first = audit.receive_json()
+                second = audit.receive_json()
+                assert first["type"] == "command_plan"
+                assert second["type"] == "command_plan"
+                assert [first["unitree_command_plan"]["plan"]["seq"], second["unitree_command_plan"]["plan"]["seq"]] == [1, 2]
+                assert all(
+                    item["unitree_command_plan"]["source"] == "live"
+                    for item in (first, second)
+                )
+
+                operator.send_json(
+                    {
+                        "type": "move_velocity",
+                        "seq": 3,
+                        "timestamp": time(),
+                        "payload": {
+                            "linear_x": 0.1,
+                            "linear_y": 0.0,
+                            "angular_z": 0.0,
+                            "duration_ms": 100,
+                        },
+                    }
+                )
+                operator.receive_json()
+                live = audit.receive_json()
+                assert live["type"] == "command_plan"
+                assert live["unitree_command_plan"]["plan"]["seq"] == 3
+                assert live["unitree_command_plan"]["plan"]["action"] == "motion.velocity"
+                assert live["unitree_command_plan"]["source"] == "live"
+                assert live["unitree_command_plan"]["stale"] is False
 
 
 def test_restored_unitree_command_plan_can_be_marked_stale(tmp_path: Path) -> None:

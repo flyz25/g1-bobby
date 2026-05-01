@@ -45,6 +45,11 @@ class Runtime:
     _last_unitree_command_plan: UnitreeCommandPlanRecord | None = field(default=None, init=False, repr=False)
     _unitree_command_plan_history: list[UnitreeCommandPlanRecord] = field(default_factory=list, init=False, repr=False)
     _unitree_command_plan_restored: bool = field(default=False, init=False, repr=False)
+    _unitree_command_plan_subscribers: set[asyncio.Queue[UnitreeCommandPlanRecord]] = field(
+        default_factory=set,
+        init=False,
+        repr=False,
+    )
     _unitree_state_restored: bool = field(default=False, init=False, repr=False)
     _operator_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _unitree_state_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
@@ -232,7 +237,10 @@ class Runtime:
             self.unitree_command_plans += 1
             self.unitree_command_plan_recorded_at = record.recorded_at
             self._persist_unitree_command_plan_history()
-        return self._decorate_unitree_command_plan_record(record)
+            decorated = self._decorate_unitree_command_plan_record(record)
+            for subscriber in self._unitree_command_plan_subscribers:
+                subscriber.put_nowait(decorated)
+        return decorated
 
     async def get_last_unitree_command_plan(self) -> UnitreeCommandPlanRecord | None:
         async with self._unitree_command_plan_lock:
@@ -245,6 +253,16 @@ class Runtime:
     async def get_unitree_command_plan_history(self) -> list[UnitreeCommandPlanRecord]:
         async with self._unitree_command_plan_lock:
             return [self._decorate_unitree_command_plan_record(record) for record in self._unitree_command_plan_history]
+
+    async def subscribe_unitree_command_plans(self) -> asyncio.Queue[UnitreeCommandPlanRecord]:
+        queue: asyncio.Queue[UnitreeCommandPlanRecord] = asyncio.Queue()
+        async with self._unitree_command_plan_lock:
+            self._unitree_command_plan_subscribers.add(queue)
+        return queue
+
+    async def unsubscribe_unitree_command_plans(self, queue: asyncio.Queue[UnitreeCommandPlanRecord]) -> None:
+        async with self._unitree_command_plan_lock:
+            self._unitree_command_plan_subscribers.discard(queue)
 
     async def unitree_command_plan_status(self) -> dict[str, object]:
         async with self._unitree_command_plan_lock:

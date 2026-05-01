@@ -12,6 +12,7 @@ from .unitree import UnitreeDdsSnapshot
 
 class ServerEventType(StrEnum):
     ACK = "ack"
+    COMMAND_PLAN = "command_plan"
     REJECT = "reject"
     STATE = "state"
     TELEMETRY = "telemetry"
@@ -47,6 +48,13 @@ class RejectEvent(BaseModel):
     reason: str
 
 
+class CommandPlanEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal[ServerEventType.COMMAND_PLAN] = ServerEventType.COMMAND_PLAN
+    unitree_command_plan: UnitreeCommandPlanRecord
+
+
 class StateEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -65,4 +73,4 @@ class TelemetryEvent(BaseModel):
     unitree_state: UnitreeDdsSnapshot | None = None
 
 
-ServerEvent = Union[AckEvent, RejectEvent, StateEvent, TelemetryEvent]
+ServerEvent = Union[AckEvent, CommandPlanEvent, RejectEvent, StateEvent, TelemetryEvent]

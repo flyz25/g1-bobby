@@ -265,6 +265,36 @@ async def test_runtime_records_unitree_command_plan(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_runtime_broadcasts_unitree_command_plan_to_subscribers(tmp_path: Path) -> None:
+    runtime = await Runtime.create(build_settings(tmp_path))
+    subscription = await runtime.subscribe_unitree_command_plans()
+
+    try:
+        record = await runtime.record_unitree_command_plan(
+            MoveVelocityCommand(
+                type=CommandType.MOVE_VELOCITY,
+                seq=3,
+                timestamp=123.0,
+                payload=MoveVelocityPayload(
+                    linear_x=0.1,
+                    linear_y=0.0,
+                    angular_z=0.0,
+                    duration_ms=100,
+                ),
+            )
+        )
+        broadcast = await subscription.get()
+        assert broadcast.plan.seq == 3
+        assert broadcast.plan.action == "motion.velocity"
+        assert broadcast.source == "live"
+        assert broadcast.stale is False
+        assert broadcast == record
+    finally:
+        await runtime.unsubscribe_unitree_command_plans(subscription)
+        await runtime.adapter.disconnect()
+
+
+@pytest.mark.asyncio
 async def test_runtime_trims_unitree_command_plan_history(tmp_path: Path) -> None:
     runtime = await Runtime.create(build_settings(tmp_path, unitree_command_plan_history_size=2))
     commands = [

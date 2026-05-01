@@ -26,6 +26,22 @@ def attach_token(url: str, token: str) -> str:
     )
 
 
+def default_audit_url(url: str) -> str:
+    parsed = urlsplit(url)
+    path = parsed.path.rstrip("/")
+    if path.endswith("/audit"):
+        return url
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            f"{path}/audit",
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+
+
 def demo_messages(client_id: str = "operator-cli", now: float | None = None) -> list[dict[str, Any]]:
     base_time = time() if now is None else now
     return [

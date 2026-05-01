@@ -13,6 +13,7 @@ from .messages import (
     DEFAULT_OPERATOR_TOKEN,
     DEFAULT_WS_URL,
     attach_token,
+    default_audit_url,
     demo_messages,
     load_jsonl_messages,
     refresh_message_timestamps,
@@ -22,6 +23,7 @@ from .messages import (
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Send operator commands to G1 Bobby.")
     parser.add_argument("--url", default=DEFAULT_WS_URL, help="WebSocket URL without token")
+    parser.add_argument("--audit-url", help="Audit WebSocket URL without token")
     parser.add_argument("--token", default=DEFAULT_OPERATOR_TOKEN, help="Operator token")
     parser.add_argument("--client-id", default="operator-cli", help="Heartbeat client id")
     parser.add_argument("--script", type=Path, help="JSONL command script to send")
@@ -37,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--telemetry-only",
         action="store_true",
         help="Connect read-only and listen without sending demo or script commands",
+    )
+    parser.add_argument(
+        "--audit-stream",
+        action="store_true",
+        help="Connect to the read-only command-plan audit stream",
     )
     parser.add_argument(
         "--watch",
@@ -106,6 +113,23 @@ def _format_unitree_command_plan_suffix(event: dict[str, Any]) -> str:
     return f" [{' '.join(details)}]" if details else ""
 
 
+def _format_unitree_command_plan_record(record: dict[str, Any]) -> str:
+    plan = record.get("plan")
+    if not isinstance(plan, dict):
+        return "command-plan"
+    details = [f"seq={plan.get('seq')}", f"action={plan.get('action')}"]
+    target = plan.get("unitree_target")
+    if isinstance(target, str):
+        details.append(f"target={target}")
+    source = record.get("source")
+    if isinstance(source, str):
+        details.append(f"source={source}")
+    stale = record.get("stale")
+    if isinstance(stale, bool) and stale:
+        details.append("stale=true")
+    return "command-plan " + " ".join(details)
+
+
 def format_event(raw_text: str, raw: bool = False) -> str:
     if raw:
         return raw_text
@@ -148,6 +172,10 @@ def format_event(raw_text: str, raw: bool = False) -> str:
             f"message={event.get('message')}"
             f"{_format_unitree_command_plan_suffix(event)}"
         )
+    if event_type == "command_plan":
+        record = event.get("unitree_command_plan")
+        if isinstance(record, dict):
+            return _format_unitree_command_plan_record(record)
     if event_type == "reject":
         return (
             "reject "
@@ -171,11 +199,11 @@ def should_retry(args: argparse.Namespace, exc: Exception) -> bool:
 
 
 def should_replay_messages(args: argparse.Namespace) -> bool:
-    return not args.telemetry_only and args.script is None
+    return not args.telemetry_only and not args.audit_stream and args.script is None
 
 
 def build_outbound_messages(args: argparse.Namespace) -> list[dict[str, Any]]:
-    if args.telemetry_only:
+    if args.telemetry_only or args.audit_stream:
         return []
     if args.script is not None:
         messages = load_jsonl_messages(args.script)
@@ -188,13 +216,19 @@ def build_outbound_messages(args: argparse.Namespace) -> list[dict[str, Any]]:
 def effective_listen_s(args: argparse.Namespace) -> float:
     if args.listen_s > 0:
         return args.listen_s
-    if args.telemetry_only:
+    if args.telemetry_only or args.audit_stream:
         return args.timeout_s
     return 0.0
 
 
+def resolve_ws_url(args: argparse.Namespace) -> str:
+    if args.audit_stream:
+        return args.audit_url or default_audit_url(args.url)
+    return args.url
+
+
 async def run(args: argparse.Namespace) -> int:
-    url = attach_token(args.url, args.token)
+    url = attach_token(resolve_ws_url(args), args.token)
     outbound_messages = build_outbound_messages(args)
     replay_on_retry = should_replay_messages(args)
 

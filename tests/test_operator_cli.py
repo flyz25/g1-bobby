@@ -8,11 +8,13 @@ from g1_bobby_operator_cli.main import (
     can_retry,
     effective_listen_s,
     format_event,
+    resolve_ws_url,
     should_replay_messages,
     should_retry,
 )
 from g1_bobby_operator_cli.messages import (
     attach_token,
+    default_audit_url,
     demo_messages,
     load_jsonl_messages,
     refresh_message_timestamps,
@@ -30,6 +32,14 @@ def test_attach_token_replaces_existing_token_and_preserves_query() -> None:
     assert (
         attach_token("ws://localhost:8010/ws/operator?token=old&client=quest", "new")
         == "ws://localhost:8010/ws/operator?token=new&client=quest"
+    )
+
+
+def test_default_audit_url_appends_audit_suffix() -> None:
+    assert default_audit_url("ws://localhost:8010/ws/operator") == "ws://localhost:8010/ws/operator/audit"
+    assert (
+        default_audit_url("ws://localhost:8010/ws/operator?token=old")
+        == "ws://localhost:8010/ws/operator/audit?token=old"
     )
 
 
@@ -122,6 +132,15 @@ def test_format_event_summarizes_ack_and_reject() -> None:
     )
 
 
+def test_format_event_summarizes_command_plan_event() -> None:
+    assert format_event(
+        '{"type":"command_plan","unitree_command_plan":{"recorded_at":123.0,"source":"restored","stale":true,'
+        '"plan":{"seq":7,"type":"move_velocity","transport":"dry_run",'
+        '"action":"motion.velocity","unitree_target":"base_velocity",'
+        '"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}}}'
+    ) == "command-plan seq=7 action=motion.velocity target=base_velocity source=restored stale=true"
+
+
 def test_format_event_can_preserve_raw_json() -> None:
     raw = '{"type":"ack","seq":1}'
 
@@ -131,6 +150,7 @@ def test_format_event_can_preserve_raw_json() -> None:
 def test_build_outbound_messages_uses_telemetry_only_mode() -> None:
     args = argparse.Namespace(
         telemetry_only=True,
+        audit_stream=False,
         script=None,
         keep_script_timestamps=False,
         client_id="quest-test",
@@ -142,6 +162,7 @@ def test_build_outbound_messages_uses_telemetry_only_mode() -> None:
 def test_build_outbound_messages_uses_demo_when_not_telemetry_only() -> None:
     args = argparse.Namespace(
         telemetry_only=False,
+        audit_stream=False,
         script=None,
         keep_script_timestamps=False,
         client_id="quest-test",
@@ -157,13 +178,13 @@ def test_build_outbound_messages_uses_demo_when_not_telemetry_only() -> None:
 
 
 def test_effective_listen_s_defaults_to_timeout_for_telemetry_only() -> None:
-    args = argparse.Namespace(listen_s=0.0, telemetry_only=True, timeout_s=3.5)
+    args = argparse.Namespace(listen_s=0.0, telemetry_only=True, audit_stream=False, timeout_s=3.5)
 
     assert effective_listen_s(args) == 3.5
 
 
 def test_effective_listen_s_prefers_explicit_value() -> None:
-    args = argparse.Namespace(listen_s=1.25, telemetry_only=True, timeout_s=3.5)
+    args = argparse.Namespace(listen_s=1.25, telemetry_only=True, audit_stream=False, timeout_s=3.5)
 
     assert effective_listen_s(args) == 1.25
 
@@ -178,8 +199,20 @@ def test_should_retry_requires_watch_and_retryable_error() -> None:
 
 
 def test_should_replay_messages_skips_script_and_telemetry_only() -> None:
-    assert should_replay_messages(argparse.Namespace(telemetry_only=False, script=None)) is True
+    assert should_replay_messages(argparse.Namespace(telemetry_only=False, audit_stream=False, script=None)) is True
     assert should_replay_messages(
-        argparse.Namespace(telemetry_only=False, script=Path("script.jsonl"))
+        argparse.Namespace(telemetry_only=False, audit_stream=False, script=Path("script.jsonl"))
     ) is False
-    assert should_replay_messages(argparse.Namespace(telemetry_only=True, script=None)) is False
+    assert should_replay_messages(argparse.Namespace(telemetry_only=True, audit_stream=False, script=None)) is False
+    assert should_replay_messages(argparse.Namespace(telemetry_only=False, audit_stream=True, script=None)) is False
+
+
+def test_resolve_ws_url_uses_audit_stream_url() -> None:
+    args = argparse.Namespace(
+        url="ws://localhost:8010/ws/operator",
+        audit_url=None,
+        audit_stream=True,
+    )
+    assert resolve_ws_url(args) == "ws://localhost:8010/ws/operator/audit"
+    args.audit_url = "ws://localhost:8010/ws/custom-audit"
+    assert resolve_ws_url(args) == "ws://localhost:8010/ws/custom-audit"

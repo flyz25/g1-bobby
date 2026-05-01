@@ -9,6 +9,7 @@ from .commands import (
 )
 from .events import (
     AckEvent,
+    CommandPlanEvent,
     ErrorCode,
     RejectEvent,
     ServerEvent,
@@ -27,6 +28,7 @@ from .unitree_command import UnitreeCommandPlan, UnitreeCommandPlanRecord, trans
 
 __all__ = [
     "AckEvent",
+    "CommandPlanEvent",
     "CommandEnvelope",
     "CommandType",
     "ControlMode",

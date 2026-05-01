@@ -85,6 +85,12 @@ g1-bobby-operator --url ws://127.0.0.1:8010/ws/operator --telemetry-only --watch
 Accepted `ack` events now also carry `unitree_command_plan`, so the CLI can show
 the dry-run Unitree translation inline with each accepted operator command.
 
+Read-only audit stream for command-plan history and live accepted-command audit:
+
+```bash
+g1-bobby-operator --url ws://127.0.0.1:8010/ws/operator --audit-stream --watch
+```
+
 ## Unitree ROS2 Container
 
 The robot stack runs in a separate Ubuntu 22.04 / ROS2 Humble container so WSL
@@ -211,6 +217,12 @@ Endpoint:
 
 ```text
 ws://localhost:8010/ws/operator?token=dev-operator-token
+```
+
+Read-only audit stream:
+
+```text
+ws://localhost:8010/ws/operator/audit?token=dev-operator-token
 ```
 
 When `/unitree/state` has recent data, the HTTP `/state` response plus operator

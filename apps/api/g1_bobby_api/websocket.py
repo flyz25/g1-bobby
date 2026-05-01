@@ -10,6 +10,7 @@ from pydantic import TypeAdapter, ValidationError
 from g1_bobby_contracts import (
     AckEvent,
     CommandEnvelope,
+    CommandPlanEvent,
     ErrorCode,
     RejectEvent,
     StateEvent,
@@ -153,6 +154,37 @@ async def operator_socket(websocket: WebSocket) -> None:
         with suppress(asyncio.CancelledError):
             await telemetry_task
         await runtime.release_operator_session(session_id)
+
+
+@router.websocket("/ws/operator/audit")
+async def operator_audit_socket(websocket: WebSocket) -> None:
+    token = websocket.query_params.get("token")
+    settings = websocket.app.state.settings
+    runtime = websocket.app.state.runtime
+
+    if token != settings.operator_token:
+        await websocket.accept()
+        runtime.record_rejected_command()
+        await send_event(
+            websocket,
+            RejectEvent(code=ErrorCode.AUTH_FAILED, reason="invalid operator token"),
+        )
+        await websocket.close(code=1008)
+        return
+
+    await websocket.accept()
+    subscription = await runtime.subscribe_unitree_command_plans()
+    try:
+        for record in await runtime.get_unitree_command_plan_history():
+            await send_event(websocket, CommandPlanEvent(unitree_command_plan=record))
+
+        while True:
+            record = await subscription.get()
+            await send_event(websocket, CommandPlanEvent(unitree_command_plan=record))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await runtime.unsubscribe_unitree_command_plans(subscription)
 
 
 async def send_telemetry(websocket: WebSocket) -> None:

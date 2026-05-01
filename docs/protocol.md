@@ -8,6 +8,12 @@ Endpoint:
 ws://localhost:8010/ws/operator?token=dev-operator-token
 ```
 
+Read-only audit endpoint:
+
+```text
+ws://localhost:8010/ws/operator/audit?token=dev-operator-token
+```
+
 ## Client Command Envelope
 
 ```json
@@ -157,3 +163,8 @@ contains the dry-run Unitree translation record for that accepted command:
 - `source=live|restored`
 - `stale=true|false`
 - `plan` with the translated Unitree action payload
+
+### `command_plan`
+
+The audit endpoint replays retained command-plan history on connect and then
+streams one `command_plan` event for each newly accepted operator command.
