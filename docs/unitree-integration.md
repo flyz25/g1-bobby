@@ -122,6 +122,17 @@ docker compose -f compose.unitree.yml --profile sim run --rm unitree-listen \
 curl http://127.0.0.1:8010/unitree/state
 ```
 
+For continuous cache repopulation across API restarts, keep the listener
+service running instead of a one-shot `run --rm` session:
+
+```bash
+docker compose up -d api
+docker compose -f compose.unitree.yml --profile sim up -d unitree-listen
+```
+
+`unitree-listen` uses `restart: unless-stopped`, so it is suitable as the
+long-running DDS-to-API forwarder during simulator sessions.
+
 The same cached snapshot is also attached to HTTP `/state` plus operator
 WebSocket `state` and `telemetry` events as `unitree_state`. Those state
 surfaces also expose a read-only projected `pose_label` derived from the latest

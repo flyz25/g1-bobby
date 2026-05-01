@@ -119,6 +119,14 @@ docker compose -f compose.unitree.yml --profile sim run --rm unitree-listen \
   g1-bobby-unitree-listen --api-url http://127.0.0.1:8010
 ```
 
+For a long-running forwarder that repopulates `/unitree/state` after API
+restarts, keep the listener service up instead of `run --rm`:
+
+```bash
+docker compose up -d api
+docker compose -f compose.unitree.yml --profile sim up -d unitree-listen
+```
+
 Defaults:
 
 ```text

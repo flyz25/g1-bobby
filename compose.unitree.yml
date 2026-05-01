@@ -69,6 +69,7 @@ services:
       - unitree
       - sim
     image: g1-bobby-unitree-ros2:humble
+    restart: unless-stopped
     network_mode: host
     ipc: host
     environment:
