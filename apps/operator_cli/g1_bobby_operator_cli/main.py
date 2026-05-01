@@ -130,6 +130,26 @@ def _format_unitree_command_plan_record(record: dict[str, Any]) -> str:
     return "command-plan " + " ".join(details)
 
 
+def _format_rejected_command_record(record: dict[str, Any]) -> str:
+    rejection = record.get("rejection")
+    if not isinstance(rejection, dict):
+        return "rejected-command"
+    details = [f"seq={rejection.get('seq')}", f"code={rejection.get('code')}"]
+    command_type = record.get("command_type")
+    if isinstance(command_type, str):
+        details.append(f"command={command_type}")
+    source = record.get("source")
+    if isinstance(source, str):
+        details.append(f"source={source}")
+    stale = record.get("stale")
+    if isinstance(stale, bool) and stale:
+        details.append("stale=true")
+    reason = rejection.get("reason")
+    if isinstance(reason, str):
+        details.append(f"reason={reason}")
+    return "rejected-command " + " ".join(details)
+
+
 def format_event(raw_text: str, raw: bool = False) -> str:
     if raw:
         return raw_text
@@ -176,6 +196,10 @@ def format_event(raw_text: str, raw: bool = False) -> str:
         record = event.get("unitree_command_plan")
         if isinstance(record, dict):
             return _format_unitree_command_plan_record(record)
+    if event_type == "rejected_command":
+        record = event.get("rejected_command")
+        if isinstance(record, dict):
+            return _format_rejected_command_record(record)
     if event_type == "reject":
         return (
             "reject "

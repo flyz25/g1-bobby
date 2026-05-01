@@ -9,7 +9,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from g1_bobby_contracts.events import StateEvent
-from g1_bobby_contracts import UnitreeCommandPlanRecord
+from g1_bobby_contracts import RejectedCommandRecord, UnitreeCommandPlanRecord
 from g1_bobby_contracts.unitree import UnitreeDdsSnapshot
 
 from .config import Settings
@@ -60,6 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "active_operator_connected": runtime.active_operator_connected,
             "unitree_state": await runtime.unitree_state_status(),
             "unitree_command_plan": await runtime.unitree_command_plan_status(),
+            "rejected_command": await runtime.rejected_command_status(),
         }
 
     @app.get("/state")
@@ -87,6 +88,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/unitree/command-plans")
     async def unitree_command_plans() -> list[UnitreeCommandPlanRecord]:
         return await app.state.runtime.get_unitree_command_plan_history()
+
+    @app.get("/operator/rejection")
+    async def rejected_command() -> RejectedCommandRecord:
+        record = await app.state.runtime.get_last_rejected_command()
+        if record is None:
+            raise HTTPException(status_code=404, detail="rejected command is not available")
+        return record
+
+    @app.get("/operator/rejections")
+    async def rejected_commands() -> list[RejectedCommandRecord]:
+        return await app.state.runtime.get_rejected_command_history()
 
     @app.post("/unitree/state")
     async def ingest_unitree_state(

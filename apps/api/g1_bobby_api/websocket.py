@@ -12,6 +12,7 @@ from g1_bobby_contracts import (
     CommandEnvelope,
     CommandPlanEvent,
     ErrorCode,
+    RejectedCommandEvent,
     RejectEvent,
     StateEvent,
     TelemetryEvent,
@@ -54,24 +55,23 @@ async def operator_socket(websocket: WebSocket) -> None:
 
     if token != settings.operator_token:
         await websocket.accept()
-        runtime.record_rejected_command()
+        reject_event = RejectEvent(code=ErrorCode.AUTH_FAILED, reason="invalid operator token")
+        await runtime.record_rejected_command_event(reject_event)
         await send_event(
             websocket,
-            RejectEvent(code=ErrorCode.AUTH_FAILED, reason="invalid operator token"),
+            reject_event,
         )
         await websocket.close(code=1008)
         return
 
     await websocket.accept()
     if not await runtime.claim_operator_session(session_id):
-        runtime.record_rejected_command()
-        await send_event(
-            websocket,
-            RejectEvent(
-                code=ErrorCode.SESSION_BUSY,
-                reason="another operator session is already connected",
-            ),
+        reject_event = RejectEvent(
+            code=ErrorCode.SESSION_BUSY,
+            reason="another operator session is already connected",
         )
+        await runtime.record_rejected_command_event(reject_event)
+        await send_event(websocket, reject_event)
         await websocket.close(code=1013)
         return
 
@@ -85,56 +85,48 @@ async def operator_socket(websocket: WebSocket) -> None:
             try:
                 command = command_adapter.validate_python(message)
             except ValidationError as exc:
-                runtime.record_rejected_command()
-                await send_event(
-                    websocket,
-                    RejectEvent(
-                        seq=message.get("seq") if isinstance(message, dict) else None,
-                        code=ErrorCode.INVALID_MESSAGE,
-                        reason=exc.errors()[0]["msg"],
-                    ),
+                reject_event = RejectEvent(
+                    seq=message.get("seq") if isinstance(message, dict) else None,
+                    code=ErrorCode.INVALID_MESSAGE,
+                    reason=exc.errors()[0]["msg"],
                 )
+                await runtime.record_rejected_command_event(reject_event)
+                await send_event(websocket, reject_event)
                 continue
 
             gate_decision = command_gate.validate_and_record(command)
             if not gate_decision.accepted:
-                runtime.record_rejected_command()
-                await send_event(
-                    websocket,
-                    RejectEvent(
-                        seq=command.seq,
-                        code=gate_decision.code or ErrorCode.INVALID_MESSAGE,
-                        reason=gate_decision.reason,
-                    ),
+                reject_event = RejectEvent(
+                    seq=command.seq,
+                    code=gate_decision.code or ErrorCode.INVALID_MESSAGE,
+                    reason=gate_decision.reason,
                 )
+                await runtime.record_rejected_command_event(reject_event, command_type=str(command.type))
+                await send_event(websocket, reject_event)
                 continue
 
             state = await runtime.adapter.get_state()
             decision = runtime.safety.validate(command, state)
             if not decision.accepted:
-                runtime.record_rejected_command()
-                await send_event(
-                    websocket,
-                    RejectEvent(
-                        seq=command.seq,
-                        code=ErrorCode.SAFETY_REJECTED,
-                        reason=decision.reason,
-                    ),
+                reject_event = RejectEvent(
+                    seq=command.seq,
+                    code=ErrorCode.SAFETY_REJECTED,
+                    reason=decision.reason,
                 )
+                await runtime.record_rejected_command_event(reject_event, command_type=str(command.type))
+                await send_event(websocket, reject_event)
                 continue
 
             try:
                 await runtime.adapter.execute(command)
             except Exception as exc:  # pragma: no cover - future real adapter boundary
-                runtime.record_rejected_command()
-                await send_event(
-                    websocket,
-                    RejectEvent(
-                        seq=command.seq,
-                        code=ErrorCode.EXECUTION_FAILED,
-                        reason=str(exc),
-                    ),
+                reject_event = RejectEvent(
+                    seq=command.seq,
+                    code=ErrorCode.EXECUTION_FAILED,
+                    reason=str(exc),
                 )
+                await runtime.record_rejected_command_event(reject_event, command_type=str(command.type))
+                await send_event(websocket, reject_event)
                 continue
 
             unitree_command_plan = await runtime.record_unitree_command_plan(command)
@@ -164,27 +156,46 @@ async def operator_audit_socket(websocket: WebSocket) -> None:
 
     if token != settings.operator_token:
         await websocket.accept()
-        runtime.record_rejected_command()
-        await send_event(
-            websocket,
-            RejectEvent(code=ErrorCode.AUTH_FAILED, reason="invalid operator token"),
-        )
+        reject_event = RejectEvent(code=ErrorCode.AUTH_FAILED, reason="invalid operator token")
+        await runtime.record_rejected_command_event(reject_event)
+        await send_event(websocket, reject_event)
         await websocket.close(code=1008)
         return
 
     await websocket.accept()
-    subscription = await runtime.subscribe_unitree_command_plans()
+    plan_subscription = await runtime.subscribe_unitree_command_plans()
+    reject_subscription = await runtime.subscribe_rejected_commands()
     try:
+        replay_events: list[tuple[float, object]] = []
         for record in await runtime.get_unitree_command_plan_history():
-            await send_event(websocket, CommandPlanEvent(unitree_command_plan=record))
+            replay_events.append((record.recorded_at, CommandPlanEvent(unitree_command_plan=record)))
+        for record in await runtime.get_rejected_command_history():
+            replay_events.append((record.recorded_at, RejectedCommandEvent(rejected_command=record)))
+        replay_events.sort(key=lambda item: item[0])
+
+        for _, event in replay_events:
+            await send_event(websocket, event)
 
         while True:
-            record = await subscription.get()
-            await send_event(websocket, CommandPlanEvent(unitree_command_plan=record))
+            plan_task = asyncio.create_task(plan_subscription.get())
+            reject_task = asyncio.create_task(reject_subscription.get())
+            done, pending = await asyncio.wait(
+                {plan_task, reject_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+            for task in done:
+                record = task.result()
+                if task is plan_task:
+                    await send_event(websocket, CommandPlanEvent(unitree_command_plan=record))
+                else:
+                    await send_event(websocket, RejectedCommandEvent(rejected_command=record))
     except WebSocketDisconnect:
         pass
     finally:
-        await runtime.unsubscribe_unitree_command_plans(subscription)
+        await runtime.unsubscribe_unitree_command_plans(plan_subscription)
+        await runtime.unsubscribe_rejected_commands(reject_subscription)
 
 
 async def send_telemetry(websocket: WebSocket) -> None:

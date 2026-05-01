@@ -12,17 +12,19 @@ from g1_bobby_adapters import (
 )
 from g1_bobby_api.config import RobotAdapterName, Settings
 from g1_bobby_api.runtime import Runtime
-from g1_bobby_contracts import UnitreeDdsSnapshot
+from g1_bobby_contracts import ErrorCode, RejectEvent, UnitreeDdsSnapshot
 from g1_bobby_contracts.commands import CommandType, MoveVelocityCommand, MoveVelocityPayload
 
 
 def build_settings(tmp_path: Path, **kwargs) -> Settings:
     cache_path = kwargs.pop("unitree_state_cache_path", tmp_path / "unitree-state.json")
     command_plan_cache_path = kwargs.pop("unitree_command_plan_cache_path", tmp_path / "unitree-command-plans.jsonl")
+    rejected_command_cache_path = kwargs.pop("rejected_command_cache_path", tmp_path / "rejected-commands.jsonl")
     return Settings(
         _env_file=None,
         unitree_state_cache_path=cache_path,
         unitree_command_plan_cache_path=command_plan_cache_path,
+        rejected_command_cache_path=rejected_command_cache_path,
         **kwargs,
     )
 
@@ -295,6 +297,31 @@ async def test_runtime_broadcasts_unitree_command_plan_to_subscribers(tmp_path: 
 
 
 @pytest.mark.asyncio
+async def test_runtime_records_and_broadcasts_rejected_command(tmp_path: Path) -> None:
+    runtime = await Runtime.create(build_settings(tmp_path))
+    subscription = await runtime.subscribe_rejected_commands()
+
+    try:
+        record = await runtime.record_rejected_command_event(
+            RejectEvent(seq=7, code=ErrorCode.SAFETY_REJECTED, reason="operator heartbeat is stale"),
+            command_type="move_velocity",
+        )
+        broadcast = await subscription.get()
+        assert broadcast.rejection.seq == 7
+        assert broadcast.rejection.code == ErrorCode.SAFETY_REJECTED
+        assert broadcast.command_type == "move_velocity"
+        assert broadcast.source == "live"
+        assert broadcast == record
+        status = await runtime.rejected_command_status()
+        assert status["available"] is True
+        assert status["records"] == 1
+        assert status["retained"] == 1
+    finally:
+        await runtime.unsubscribe_rejected_commands(subscription)
+        await runtime.adapter.disconnect()
+
+
+@pytest.mark.asyncio
 async def test_runtime_trims_unitree_command_plan_history(tmp_path: Path) -> None:
     runtime = await Runtime.create(build_settings(tmp_path, unitree_command_plan_history_size=2))
     commands = [
@@ -417,6 +444,43 @@ async def test_runtime_restored_unitree_command_plan_can_be_marked_stale(tmp_pat
         status = await reloaded.unitree_command_plan_status()
         assert status["source"] == "restored"
         assert status["stale"] is True
+    finally:
+        await reloaded.adapter.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_runtime_persists_and_reloads_rejected_command_history(tmp_path: Path) -> None:
+    settings = build_settings(
+        tmp_path,
+        rejected_command_history_size=2,
+        rejected_command_cache_path=tmp_path / "rejected-commands.jsonl",
+    )
+    runtime = await Runtime.create(settings)
+
+    try:
+        for seq in (1, 2, 3):
+            await runtime.record_rejected_command_event(
+                RejectEvent(seq=seq, code=ErrorCode.REPLAYED_COMMAND, reason="replayed command"),
+                command_type="set_mode",
+            )
+        assert settings.rejected_command_cache_path.exists()
+    finally:
+        await runtime.adapter.disconnect()
+
+    reloaded = await Runtime.create(settings)
+    try:
+        history = await reloaded.get_rejected_command_history()
+        assert [record.rejection.seq for record in history] == [2, 3]
+        assert all(record.source == "restored" for record in history)
+        last_record = await reloaded.get_last_rejected_command()
+        assert last_record is not None
+        assert last_record.rejection.seq == 3
+        status = await reloaded.rejected_command_status()
+        assert status["available"] is True
+        assert status["records"] == 2
+        assert status["retained"] == 2
+        assert status["history_size"] == 2
+        assert status["source"] == "restored"
     finally:
         await reloaded.adapter.disconnect()
 

@@ -10,6 +10,8 @@ from typing import Any
 from g1_bobby_adapters import RobotAdapter, create_robot_adapter
 from g1_bobby_contracts import (
     CommandEnvelope,
+    RejectEvent,
+    RejectedCommandRecord,
     RobotState,
     UnitreeCommandPlan,
     UnitreeCommandPlanRecord,
@@ -34,13 +36,18 @@ class Runtime:
     unitree_state_received_at: float | None = None
     unitree_command_plans: int = 0
     unitree_command_plan_recorded_at: float | None = None
+    rejected_command_records: int = 0
+    rejected_command_recorded_at: float | None = None
     unitree_command_plan_history_size: int = 10
+    rejected_command_history_size: int = 20
     unitree_state_cache_path: Path = field(default_factory=lambda: Path(".runtime/unitree_state.json"))
     unitree_command_plan_cache_path: Path = field(
         default_factory=lambda: Path(".runtime/unitree_command_plans.jsonl")
     )
+    rejected_command_cache_path: Path = field(default_factory=lambda: Path(".runtime/rejected_commands.jsonl"))
     unitree_state_ttl_s: float = 2.0
     unitree_command_plan_ttl_s: float = 10.0
+    rejected_command_ttl_s: float = 10.0
     _unitree_state: UnitreeDdsSnapshot | None = field(default=None, init=False, repr=False)
     _last_unitree_command_plan: UnitreeCommandPlanRecord | None = field(default=None, init=False, repr=False)
     _unitree_command_plan_history: list[UnitreeCommandPlanRecord] = field(default_factory=list, init=False, repr=False)
@@ -50,10 +57,19 @@ class Runtime:
         init=False,
         repr=False,
     )
+    _last_rejected_command: RejectedCommandRecord | None = field(default=None, init=False, repr=False)
+    _rejected_command_history: list[RejectedCommandRecord] = field(default_factory=list, init=False, repr=False)
+    _rejected_command_restored: bool = field(default=False, init=False, repr=False)
+    _rejected_command_subscribers: set[asyncio.Queue[RejectedCommandRecord]] = field(
+        default_factory=set,
+        init=False,
+        repr=False,
+    )
     _unitree_state_restored: bool = field(default=False, init=False, repr=False)
     _operator_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _unitree_state_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _unitree_command_plan_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    _rejected_command_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
     @classmethod
     async def create(cls, settings: Settings | None = None) -> "Runtime":
@@ -69,12 +85,16 @@ class Runtime:
             adapter_name=str(resolved_settings.robot_adapter),
             unitree_state_cache_path=resolved_settings.unitree_state_cache_path,
             unitree_command_plan_cache_path=resolved_settings.unitree_command_plan_cache_path,
+            rejected_command_cache_path=resolved_settings.rejected_command_cache_path,
             unitree_state_ttl_s=resolved_settings.unitree_state_ttl_s,
             unitree_command_plan_ttl_s=resolved_settings.unitree_command_plan_ttl_s,
+            rejected_command_ttl_s=resolved_settings.rejected_command_ttl_s,
             unitree_command_plan_history_size=resolved_settings.unitree_command_plan_history_size,
+            rejected_command_history_size=resolved_settings.rejected_command_history_size,
         )
         await runtime.load_persisted_unitree_state()
         await runtime.load_persisted_unitree_command_plans()
+        await runtime.load_persisted_rejected_commands()
         return runtime
 
     @property
@@ -146,10 +166,32 @@ class Runtime:
         tmp_path.write_text(f"{payload}\n" if payload else "", encoding="utf-8")
         tmp_path.replace(self.unitree_command_plan_cache_path)
 
+    def _persist_rejected_command_history(self) -> None:
+        self.rejected_command_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.rejected_command_cache_path.with_suffix(f"{self.rejected_command_cache_path.suffix}.tmp")
+        payload = "\n".join(
+            json.dumps(
+                {
+                    "recorded_at": record.recorded_at,
+                    "rejection": record.rejection.model_dump(mode="json"),
+                    "command_type": record.command_type,
+                }
+            )
+            for record in self._rejected_command_history
+        )
+        tmp_path.write_text(f"{payload}\n" if payload else "", encoding="utf-8")
+        tmp_path.replace(self.rejected_command_cache_path)
+
     def _decorate_unitree_command_plan_record(self, record: UnitreeCommandPlanRecord) -> UnitreeCommandPlanRecord:
         decorated = record.model_copy(deep=True)
         decorated.source = "restored" if self._unitree_command_plan_restored else "live"
         decorated.stale = (time() - decorated.recorded_at) > self.unitree_command_plan_ttl_s
+        return decorated
+
+    def _decorate_rejected_command_record(self, record: RejectedCommandRecord) -> RejectedCommandRecord:
+        decorated = record.model_copy(deep=True)
+        decorated.source = "restored" if self._rejected_command_restored else "live"
+        decorated.stale = (time() - decorated.recorded_at) > self.rejected_command_ttl_s
         return decorated
 
     async def record_unitree_state(self, snapshot: UnitreeDdsSnapshot) -> None:
@@ -210,6 +252,40 @@ class Runtime:
             self.unitree_command_plan_recorded_at = retained[-1].recorded_at
         return True
 
+    async def load_persisted_rejected_commands(self) -> bool:
+        if not self.rejected_command_cache_path.exists():
+            return False
+
+        entries: list[RejectedCommandRecord] = []
+        try:
+            for raw_line in self.rejected_command_cache_path.read_text(encoding="utf-8").splitlines():
+                if not raw_line.strip():
+                    continue
+                payload = json.loads(raw_line)
+                entries.append(
+                    RejectedCommandRecord(
+                        recorded_at=float(payload["recorded_at"]),
+                        source="restored",
+                        stale=False,
+                        rejection=RejectEvent.model_validate(payload["rejection"]),
+                        command_type=payload.get("command_type"),
+                    )
+                )
+        except (OSError, ValidationError, json.JSONDecodeError, KeyError, TypeError):
+            return False
+
+        if not entries:
+            return False
+
+        retained = entries[-self.rejected_command_history_size :]
+        async with self._rejected_command_lock:
+            self._rejected_command_history = retained
+            self._last_rejected_command = retained[-1]
+            self._rejected_command_restored = True
+            self.rejected_command_records = len(retained)
+            self.rejected_command_recorded_at = retained[-1].recorded_at
+        return True
+
     async def get_unitree_state(self) -> UnitreeDdsSnapshot | None:
         async with self._unitree_state_lock:
             return self._decorate_unitree_state(self._unitree_state) if self._unitree_state else None
@@ -264,6 +340,55 @@ class Runtime:
         async with self._unitree_command_plan_lock:
             self._unitree_command_plan_subscribers.discard(queue)
 
+    async def record_rejected_command_event(
+        self,
+        reject_event: RejectEvent,
+        command_type: str | None = None,
+    ) -> RejectedCommandRecord:
+        self.record_rejected_command()
+        record = RejectedCommandRecord(
+            recorded_at=time(),
+            source="live",
+            stale=False,
+            rejection=reject_event,
+            command_type=command_type,
+        )
+        async with self._rejected_command_lock:
+            self._last_rejected_command = record
+            self._rejected_command_history.append(record)
+            self._rejected_command_restored = False
+            if len(self._rejected_command_history) > self.rejected_command_history_size:
+                self._rejected_command_history = self._rejected_command_history[-self.rejected_command_history_size :]
+            self.rejected_command_records += 1
+            self.rejected_command_recorded_at = record.recorded_at
+            self._persist_rejected_command_history()
+            decorated = self._decorate_rejected_command_record(record)
+            for subscriber in self._rejected_command_subscribers:
+                subscriber.put_nowait(decorated)
+        return decorated
+
+    async def get_last_rejected_command(self) -> RejectedCommandRecord | None:
+        async with self._rejected_command_lock:
+            return (
+                self._decorate_rejected_command_record(self._last_rejected_command)
+                if self._last_rejected_command
+                else None
+            )
+
+    async def get_rejected_command_history(self) -> list[RejectedCommandRecord]:
+        async with self._rejected_command_lock:
+            return [self._decorate_rejected_command_record(record) for record in self._rejected_command_history]
+
+    async def subscribe_rejected_commands(self) -> asyncio.Queue[RejectedCommandRecord]:
+        queue: asyncio.Queue[RejectedCommandRecord] = asyncio.Queue()
+        async with self._rejected_command_lock:
+            self._rejected_command_subscribers.add(queue)
+        return queue
+
+    async def unsubscribe_rejected_commands(self, queue: asyncio.Queue[RejectedCommandRecord]) -> None:
+        async with self._rejected_command_lock:
+            self._rejected_command_subscribers.discard(queue)
+
     async def unitree_command_plan_status(self) -> dict[str, object]:
         async with self._unitree_command_plan_lock:
             last = (
@@ -277,6 +402,23 @@ class Runtime:
                 "available": self._last_unitree_command_plan is not None,
                 "retained": len(self._unitree_command_plan_history),
                 "history_size": self.unitree_command_plan_history_size,
+                "source": last.source if last else None,
+                "stale": last.stale if last else None,
+            }
+
+    async def rejected_command_status(self) -> dict[str, object]:
+        async with self._rejected_command_lock:
+            last = (
+                self._decorate_rejected_command_record(self._last_rejected_command)
+                if self._last_rejected_command
+                else None
+            )
+            return {
+                "records": self.rejected_command_records,
+                "last_recorded_at": self.rejected_command_recorded_at,
+                "available": self._last_rejected_command is not None,
+                "retained": len(self._rejected_command_history),
+                "history_size": self.rejected_command_history_size,
                 "source": last.source if last else None,
                 "stale": last.stale if last else None,
             }

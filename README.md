@@ -85,7 +85,7 @@ g1-bobby-operator --url ws://127.0.0.1:8010/ws/operator --telemetry-only --watch
 Accepted `ack` events now also carry `unitree_command_plan`, so the CLI can show
 the dry-run Unitree translation inline with each accepted operator command.
 
-Read-only audit stream for command-plan history and live accepted-command audit:
+Read-only audit stream for command-plan history plus rejected-command audit:
 
 ```bash
 g1-bobby-operator --url ws://127.0.0.1:8010/ws/operator --audit-stream --watch
@@ -132,6 +132,13 @@ History audit ringkas juga tersedia di:
 http://localhost:8010/unitree/command-plans
 ```
 
+Rejected-command audit juga tersedia di:
+
+```text
+http://localhost:8010/operator/rejection
+http://localhost:8010/operator/rejections
+```
+
 Read simulator state from a second terminal:
 
 ```bash
@@ -176,8 +183,9 @@ The API persists the latest Unitree snapshot to
 `/unitree/state` and the read-only projected `/state` view even before the next
 listener post arrives. It also persists the recent Unitree dry-run command-plan
 window to `G1_BOBBY_UNITREE_COMMAND_PLAN_CACHE_PATH`, so
-`/unitree/command-plan` and `/unitree/command-plans` survive a plain API
-restart as well. Served `unitree_state` payloads now include:
+`/unitree/command-plan`, `/unitree/command-plans`, `/operator/rejection`, and
+`/operator/rejections` survive a plain API restart as well. Served
+`unitree_state` payloads now include:
 
 ```text
 source=live|restored

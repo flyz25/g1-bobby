@@ -168,3 +168,9 @@ contains the dry-run Unitree translation record for that accepted command:
 
 The audit endpoint replays retained command-plan history on connect and then
 streams one `command_plan` event for each newly accepted operator command.
+
+### `rejected_command`
+
+The same audit endpoint also replays retained rejected-command history on
+connect and then streams one `rejected_command` event for each newly recorded
+operator rejection.

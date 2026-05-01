@@ -14,6 +14,7 @@ class ServerEventType(StrEnum):
     ACK = "ack"
     COMMAND_PLAN = "command_plan"
     REJECT = "reject"
+    REJECTED_COMMAND = "rejected_command"
     STATE = "state"
     TELEMETRY = "telemetry"
 
@@ -48,11 +49,28 @@ class RejectEvent(BaseModel):
     reason: str
 
 
+class RejectedCommandRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recorded_at: float
+    source: str
+    stale: bool = False
+    rejection: RejectEvent
+    command_type: str | None = None
+
+
 class CommandPlanEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal[ServerEventType.COMMAND_PLAN] = ServerEventType.COMMAND_PLAN
     unitree_command_plan: UnitreeCommandPlanRecord
+
+
+class RejectedCommandEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal[ServerEventType.REJECTED_COMMAND] = ServerEventType.REJECTED_COMMAND
+    rejected_command: RejectedCommandRecord
 
 
 class StateEvent(BaseModel):
@@ -73,4 +91,11 @@ class TelemetryEvent(BaseModel):
     unitree_state: UnitreeDdsSnapshot | None = None
 
 
-ServerEvent = Union[AckEvent, CommandPlanEvent, RejectEvent, StateEvent, TelemetryEvent]
+ServerEvent = Union[
+    AckEvent,
+    CommandPlanEvent,
+    RejectEvent,
+    RejectedCommandEvent,
+    StateEvent,
+    TelemetryEvent,
+]

@@ -141,6 +141,17 @@ def test_format_event_summarizes_command_plan_event() -> None:
     ) == "command-plan seq=7 action=motion.velocity target=base_velocity source=restored stale=true"
 
 
+def test_format_event_summarizes_rejected_command_event() -> None:
+    assert format_event(
+        '{"type":"rejected_command","rejected_command":{"recorded_at":123.0,"source":"restored","stale":true,'
+        '"command_type":"move_velocity","rejection":{"type":"reject","seq":9,"code":"safety_rejected",'
+        '"reason":"operator heartbeat is stale"}}}'
+    ) == (
+        "rejected-command seq=9 code=safety_rejected command=move_velocity "
+        "source=restored stale=true reason=operator heartbeat is stale"
+    )
+
+
 def test_format_event_can_preserve_raw_json() -> None:
     raw = '{"type":"ack","seq":1}'
 

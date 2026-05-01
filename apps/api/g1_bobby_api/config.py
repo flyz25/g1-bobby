@@ -30,9 +30,12 @@ class Settings(BaseSettings):
     unitree_enable_motor_commands: bool = False
     unitree_state_cache_path: Path = Path(".runtime/unitree_state.json")
     unitree_command_plan_cache_path: Path = Path(".runtime/unitree_command_plans.jsonl")
+    rejected_command_cache_path: Path = Path(".runtime/rejected_commands.jsonl")
     unitree_state_ttl_s: float = Field(default=2.0, gt=0.0)
     unitree_command_plan_ttl_s: float = Field(default=10.0, gt=0.0)
     unitree_command_plan_history_size: int = Field(default=10, gt=0)
+    rejected_command_ttl_s: float = Field(default=10.0, gt=0.0)
+    rejected_command_history_size: int = Field(default=20, gt=0)
 
     safety_max_linear_mps: float = Field(default=0.35, gt=0.0)
     safety_max_angular_radps: float = Field(default=0.6, gt=0.0)
