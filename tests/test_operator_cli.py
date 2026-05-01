@@ -9,6 +9,7 @@ from g1_bobby_operator_cli.main import (
     effective_listen_s,
     extract_event_id,
     format_event,
+    handle_resume_file_command,
     initialize_resume_after_id,
     load_resume_after_id,
     persist_resume_after_id,
@@ -235,6 +236,53 @@ def test_initialize_resume_after_id_can_reset_resume_file(tmp_path: Path) -> Non
 
     assert initialize_resume_after_id(args) == 4
     assert load_resume_after_id(resume_file) == 4
+
+
+def test_handle_resume_file_command_reports_status(tmp_path: Path, capsys) -> None:
+    resume_file = tmp_path / "audit-resume.json"
+    persist_resume_after_id(resume_file, 9)
+    args = argparse.Namespace(
+        after_id=4,
+        resume_file=resume_file,
+        resume_reset=False,
+        resume_status=True,
+        resume_clear=False,
+    )
+
+    assert handle_resume_file_command(args) == 0
+    captured = capsys.readouterr()
+    assert '"after_id": 9' in captured.out
+
+
+def test_handle_resume_file_command_clears_resume_file(tmp_path: Path, capsys) -> None:
+    resume_file = tmp_path / "audit-resume.json"
+    persist_resume_after_id(resume_file, 9)
+    args = argparse.Namespace(
+        after_id=4,
+        resume_file=resume_file,
+        resume_reset=False,
+        resume_status=False,
+        resume_clear=True,
+    )
+
+    assert handle_resume_file_command(args) == 0
+    captured = capsys.readouterr()
+    assert '"after_id": 0' in captured.out
+    assert load_resume_after_id(resume_file) == 0
+
+
+def test_handle_resume_file_command_requires_resume_file_for_clear(capsys) -> None:
+    args = argparse.Namespace(
+        after_id=4,
+        resume_file=None,
+        resume_reset=False,
+        resume_status=False,
+        resume_clear=True,
+    )
+
+    assert handle_resume_file_command(args) == 1
+    captured = capsys.readouterr()
+    assert "--resume-clear requires --resume-file" in captured.err
 
 
 def test_build_outbound_messages_uses_telemetry_only_mode() -> None:

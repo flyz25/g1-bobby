@@ -62,6 +62,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Ignore any saved resume-file cursor and start audit replay from --after-id",
     )
+    resume_command_group = parser.add_mutually_exclusive_group()
+    resume_command_group.add_argument(
+        "--resume-status",
+        action="store_true",
+        help="Print the effective audit resume cursor and exit",
+    )
+    resume_command_group.add_argument(
+        "--resume-clear",
+        action="store_true",
+        help="Reset the resume-file cursor to zero and exit",
+    )
     parser.add_argument(
         "--watch",
         action="store_true",
@@ -407,6 +418,29 @@ def initialize_resume_after_id(args: argparse.Namespace) -> int:
     return load_resume_after_id(args.resume_file)
 
 
+def handle_resume_file_command(args: argparse.Namespace) -> int | None:
+    if args.resume_clear:
+        if args.resume_file is None:
+            print("operator cli failed: --resume-clear requires --resume-file", file=sys.stderr)
+            return 1
+        persist_resume_after_id(args.resume_file, 0)
+        print(json.dumps({"resume_file": str(args.resume_file) if args.resume_file else None, "after_id": 0}))
+        return 0
+    if args.resume_status:
+        effective_after_id = initialize_resume_after_id(args)
+        print(
+            json.dumps(
+                {
+                    "resume_file": str(args.resume_file) if args.resume_file else None,
+                    "after_id": effective_after_id,
+                    "after_id_arg": max(args.after_id, 0),
+                }
+            )
+        )
+        return 0
+    return None
+
+
 def persist_resume_after_id(path: Path | None, after_id: int) -> None:
     if path is None:
         return
@@ -507,6 +541,9 @@ async def run(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    early_exit = handle_resume_file_command(args)
+    if early_exit is not None:
+        return early_exit
     try:
         return asyncio.run(run(args))
     except (OSError, TimeoutError, websockets.WebSocketException, ValueError) as exc:
