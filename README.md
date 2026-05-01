@@ -117,6 +117,12 @@ The API also exposes the latest accepted dry-run translation at:
 http://localhost:8010/unitree/command-plan
 ```
 
+History audit ringkas juga tersedia di:
+
+```text
+http://localhost:8010/unitree/command-plans
+```
+
 Read simulator state from a second terminal:
 
 ```bash

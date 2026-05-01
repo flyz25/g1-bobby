@@ -251,6 +251,40 @@ async def test_runtime_records_unitree_command_plan(tmp_path: Path) -> None:
         status = await runtime.unitree_command_plan_status()
         assert status["available"] is True
         assert status["plans"] == 1
+        assert status["retained"] == 1
+        assert status["history_size"] == 10
+    finally:
+        await runtime.adapter.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_runtime_trims_unitree_command_plan_history(tmp_path: Path) -> None:
+    runtime = await Runtime.create(build_settings(tmp_path, unitree_command_plan_history_size=2))
+    commands = [
+        MoveVelocityCommand(
+            type=CommandType.MOVE_VELOCITY,
+            seq=seq,
+            timestamp=100.0 + seq,
+            payload=MoveVelocityPayload(
+                linear_x=0.1 * seq,
+                linear_y=0.0,
+                angular_z=0.0,
+                duration_ms=100,
+            ),
+        )
+        for seq in (1, 2, 3)
+    ]
+
+    try:
+        for command in commands:
+            await runtime.record_unitree_command_plan(command)
+
+        history = await runtime.get_unitree_command_plan_history()
+        assert [plan.seq for plan in history] == [2, 3]
+        status = await runtime.unitree_command_plan_status()
+        assert status["plans"] == 3
+        assert status["retained"] == 2
+        assert status["history_size"] == 2
     finally:
         await runtime.adapter.disconnect()
 

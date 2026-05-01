@@ -84,6 +84,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="unitree command plan is not available")
         return plan
 
+    @app.get("/unitree/command-plans")
+    async def unitree_command_plans() -> list[UnitreeCommandPlan]:
+        return await app.state.runtime.get_unitree_command_plan_history()
+
     @app.post("/unitree/state")
     async def ingest_unitree_state(
         snapshot: UnitreeDdsSnapshot,

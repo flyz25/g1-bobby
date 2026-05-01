@@ -109,6 +109,12 @@ At runtime, the API stores the latest accepted dry-run plan and exposes it via:
 GET /unitree/command-plan
 ```
 
+It also keeps a short in-memory history window for recent accepted plans:
+
+```text
+GET /unitree/command-plans
+```
+
 In WSL2, `eth0` is usually a NAT interface. DDS multicast to a physical robot
 may require WSL mirrored networking, a bridged adapter setup, or running this
 container on a native Linux host connected to the robot network.

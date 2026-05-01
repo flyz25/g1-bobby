@@ -267,12 +267,76 @@ def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
         runtime = client.get("/runtime")
         assert runtime.json()["unitree_command_plan"]["available"] is True
         assert runtime.json()["unitree_command_plan"]["plans"] == 3
+        assert runtime.json()["unitree_command_plan"]["retained"] == 3
+        assert runtime.json()["unitree_command_plan"]["history_size"] == 10
+
+        history = client.get("/unitree/command-plans")
+        assert history.status_code == 200
+        assert [plan["action"] for plan in history.json()] == [
+            "bridge.keepalive",
+            "bridge.set_mode",
+            "motion.velocity",
+        ]
 
 
 def test_unitree_command_plan_missing_before_any_accept(tmp_path: Path) -> None:
     with TestClient(create_app(build_settings(tmp_path))) as client:
         response = client.get("/unitree/command-plan")
         assert response.status_code == 404
+        history = client.get("/unitree/command-plans")
+        assert history.status_code == 200
+        assert history.json() == []
+
+
+def test_unitree_command_plan_history_is_trimmed(tmp_path: Path) -> None:
+    settings = build_settings(tmp_path, unitree_command_plan_history_size=2)
+    with TestClient(create_app(settings)) as client:
+        with client.websocket_connect("/ws/operator?token=dev-operator-token") as websocket:
+            assert websocket.receive_json()["type"] == "state"
+
+            websocket.send_json(
+                {
+                    "type": "heartbeat",
+                    "seq": 1,
+                    "timestamp": time(),
+                    "payload": {"client_id": "quest-dev"},
+                }
+            )
+            assert websocket.receive_json()["type"] == "ack"
+
+            websocket.send_json(
+                {
+                    "type": "set_mode",
+                    "seq": 2,
+                    "timestamp": time(),
+                    "payload": {"mode": "manual"},
+                }
+            )
+            assert websocket.receive_json()["type"] == "ack"
+
+            websocket.send_json(
+                {
+                    "type": "move_velocity",
+                    "seq": 3,
+                    "timestamp": time(),
+                    "payload": {
+                        "linear_x": 0.1,
+                        "linear_y": 0.0,
+                        "angular_z": 0.0,
+                        "duration_ms": 100,
+                    },
+                }
+            )
+            assert websocket.receive_json()["type"] == "ack"
+
+        history = client.get("/unitree/command-plans")
+        assert history.status_code == 200
+        assert [plan["seq"] for plan in history.json()] == [2, 3]
+
+        runtime = client.get("/runtime")
+        assert runtime.json()["unitree_command_plan"]["plans"] == 3
+        assert runtime.json()["unitree_command_plan"]["retained"] == 2
+        assert runtime.json()["unitree_command_plan"]["history_size"] == 2
 
 
 def test_websocket_rejects_replayed_sequence(tmp_path: Path) -> None:
