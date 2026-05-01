@@ -103,6 +103,12 @@ This command bridge is intentionally audit-only for now. It translates validated
 operator commands into a concrete Unitree dry-run action plan, but it does not
 publish DDS or send motor commands yet.
 
+At runtime, the API stores the latest accepted dry-run plan and exposes it via:
+
+```text
+GET /unitree/command-plan
+```
+
 In WSL2, `eth0` is usually a NAT interface. DDS multicast to a physical robot
 may require WSL mirrored networking, a bridged adapter setup, or running this
 container on a native Linux host connected to the robot network.

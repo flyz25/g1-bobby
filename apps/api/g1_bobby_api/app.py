@@ -9,6 +9,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from g1_bobby_contracts.events import StateEvent
+from g1_bobby_contracts import UnitreeCommandPlan
 from g1_bobby_contracts.unitree import UnitreeDdsSnapshot
 
 from .config import Settings
@@ -58,6 +59,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "rejected_commands": runtime.rejected_commands,
             "active_operator_connected": runtime.active_operator_connected,
             "unitree_state": await runtime.unitree_state_status(),
+            "unitree_command_plan": await runtime.unitree_command_plan_status(),
         }
 
     @app.get("/state")
@@ -74,6 +76,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if snapshot is None:
             raise HTTPException(status_code=404, detail="unitree state is not available")
         return snapshot
+
+    @app.get("/unitree/command-plan")
+    async def unitree_command_plan() -> UnitreeCommandPlan:
+        plan = await app.state.runtime.get_last_unitree_command_plan()
+        if plan is None:
+            raise HTTPException(status_code=404, detail="unitree command plan is not available")
+        return plan
 
     @app.post("/unitree/state")
     async def ingest_unitree_state(

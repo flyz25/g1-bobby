@@ -12,6 +12,7 @@ from g1_bobby_adapters import (
 from g1_bobby_api.config import RobotAdapterName, Settings
 from g1_bobby_api.runtime import Runtime
 from g1_bobby_contracts import UnitreeDdsSnapshot
+from g1_bobby_contracts.commands import CommandType, MoveVelocityCommand, MoveVelocityPayload
 
 
 def build_settings(tmp_path: Path, **kwargs) -> Settings:
@@ -223,6 +224,35 @@ async def test_runtime_persists_and_reloads_unitree_snapshot(tmp_path: Path) -> 
         assert status["updates"] == 1
     finally:
         await reloaded.adapter.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_runtime_records_unitree_command_plan(tmp_path: Path) -> None:
+    runtime = await Runtime.create(build_settings(tmp_path))
+    command = MoveVelocityCommand(
+        type=CommandType.MOVE_VELOCITY,
+        seq=3,
+        timestamp=123.0,
+        payload=MoveVelocityPayload(
+            linear_x=0.1,
+            linear_y=0.0,
+            angular_z=0.2,
+            duration_ms=150,
+        ),
+    )
+
+    try:
+        plan = await runtime.record_unitree_command_plan(command)
+        assert plan.action == "motion.velocity"
+
+        last_plan = await runtime.get_last_unitree_command_plan()
+        assert last_plan is not None
+        assert last_plan.seq == 3
+        status = await runtime.unitree_command_plan_status()
+        assert status["available"] is True
+        assert status["plans"] == 1
+    finally:
+        await runtime.adapter.disconnect()
 
 
 @pytest.mark.asyncio

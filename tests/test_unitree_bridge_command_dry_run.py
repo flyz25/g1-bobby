@@ -15,15 +15,15 @@ from g1_bobby_contracts.commands import (
     StopCommand,
     StopPayload,
 )
+from g1_bobby_contracts.unitree_command import translate_unitree_command
 from g1_bobby_unitree_bridge.command_dry_run import (
     load_jsonl_commands,
     main,
-    translate_command,
 )
 
 
 def test_translate_move_velocity_command() -> None:
-    translated = translate_command(
+    translated = translate_unitree_command(
         MoveVelocityCommand(
             type=CommandType.MOVE_VELOCITY,
             seq=3,
@@ -37,7 +37,7 @@ def test_translate_move_velocity_command() -> None:
         )
     )
 
-    assert translated == {
+    assert translated.model_dump() == {
         "seq": 3,
         "type": "move_velocity",
         "transport": "dry_run",
@@ -53,7 +53,7 @@ def test_translate_move_velocity_command() -> None:
 
 
 def test_translate_stop_and_estop_commands() -> None:
-    stop = translate_command(
+    stop = translate_unitree_command(
         StopCommand(
             type=CommandType.STOP,
             seq=4,
@@ -61,7 +61,7 @@ def test_translate_stop_and_estop_commands() -> None:
             payload=StopPayload(reason="operator_stop"),
         )
     )
-    estop = translate_command(
+    estop = translate_unitree_command(
         EmergencyStopCommand(
             type=CommandType.ESTOP,
             seq=5,
@@ -70,14 +70,14 @@ def test_translate_stop_and_estop_commands() -> None:
         )
     )
 
-    assert stop["action"] == "motion.stop"
-    assert stop["payload"]["linear_x"] == 0.0
-    assert estop["action"] == "safety.estop"
-    assert estop["payload"]["reason"] == "operator_estop"
+    assert stop.action == "motion.stop"
+    assert stop.payload["linear_x"] == 0.0
+    assert estop.action == "safety.estop"
+    assert estop.payload["reason"] == "operator_estop"
 
 
 def test_translate_heartbeat_and_set_mode_commands() -> None:
-    heartbeat = translate_command(
+    heartbeat = translate_unitree_command(
         HeartbeatCommand(
             type=CommandType.HEARTBEAT,
             seq=1,
@@ -85,7 +85,7 @@ def test_translate_heartbeat_and_set_mode_commands() -> None:
             payload=HeartbeatPayload(client_id="quest"),
         )
     )
-    set_mode = translate_command(
+    set_mode = translate_unitree_command(
         SetModeCommand(
             type=CommandType.SET_MODE,
             seq=2,
@@ -94,10 +94,10 @@ def test_translate_heartbeat_and_set_mode_commands() -> None:
         )
     )
 
-    assert heartbeat["action"] == "bridge.keepalive"
-    assert heartbeat["payload"]["client_id"] == "quest"
-    assert set_mode["action"] == "bridge.set_mode"
-    assert set_mode["payload"]["mode"] == "manual"
+    assert heartbeat.action == "bridge.keepalive"
+    assert heartbeat.payload["client_id"] == "quest"
+    assert set_mode.action == "bridge.set_mode"
+    assert set_mode.payload["mode"] == "manual"
 
 
 def test_load_jsonl_commands_reads_objects(tmp_path: Path) -> None:

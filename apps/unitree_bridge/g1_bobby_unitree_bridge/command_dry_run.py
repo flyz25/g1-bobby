@@ -8,7 +8,8 @@ from typing import Any, Sequence
 
 from pydantic import TypeAdapter, ValidationError
 
-from g1_bobby_contracts.commands import CommandEnvelope, CommandType
+from g1_bobby_contracts.commands import CommandEnvelope
+from g1_bobby_contracts.unitree_command import translate_unitree_command
 
 
 command_adapter = TypeAdapter(CommandEnvelope)
@@ -28,77 +29,6 @@ def load_jsonl_commands(path: Path) -> list[dict[str, Any]]:
             raise ValueError(f"{path}:{line_number}: expected JSON object")
         commands.append(payload)
     return commands
-
-
-def translate_command(command: CommandEnvelope) -> dict[str, object]:
-    if command.type == CommandType.HEARTBEAT:
-        return {
-            "seq": command.seq,
-            "type": str(command.type),
-            "transport": "dry_run",
-            "action": "bridge.keepalive",
-            "unitree_target": "session",
-            "payload": {
-                "client_id": command.payload.client_id,
-                "timestamp": command.timestamp,
-            },
-        }
-
-    if command.type == CommandType.SET_MODE:
-        return {
-            "seq": command.seq,
-            "type": str(command.type),
-            "transport": "dry_run",
-            "action": "bridge.set_mode",
-            "unitree_target": "motion_mode",
-            "payload": {
-                "mode": command.payload.mode,
-            },
-        }
-
-    if command.type == CommandType.MOVE_VELOCITY:
-        return {
-            "seq": command.seq,
-            "type": str(command.type),
-            "transport": "dry_run",
-            "action": "motion.velocity",
-            "unitree_target": "base_velocity",
-            "payload": {
-                "linear_x": command.payload.linear_x,
-                "linear_y": command.payload.linear_y,
-                "angular_z": command.payload.angular_z,
-                "duration_ms": command.payload.duration_ms,
-            },
-        }
-
-    if command.type == CommandType.STOP:
-        return {
-            "seq": command.seq,
-            "type": str(command.type),
-            "transport": "dry_run",
-            "action": "motion.stop",
-            "unitree_target": "base_velocity",
-            "payload": {
-                "reason": command.payload.reason,
-                "linear_x": 0.0,
-                "linear_y": 0.0,
-                "angular_z": 0.0,
-            },
-        }
-
-    if command.type == CommandType.ESTOP:
-        return {
-            "seq": command.seq,
-            "type": str(command.type),
-            "transport": "dry_run",
-            "action": "safety.estop",
-            "unitree_target": "motion_gate",
-            "payload": {
-                "reason": command.payload.reason,
-            },
-        }
-
-    raise ValueError(f"unsupported command type: {command.type}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -138,7 +68,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "status": "ok",
         "transport": "dry_run",
         "command_count": len(commands),
-        "commands": [translate_command(command) for command in commands],
+        "commands": [translate_unitree_command(command).model_dump() for command in commands],
     }
     print(json.dumps(payload, indent=2 if args.pretty else None, sort_keys=True))
     return 0

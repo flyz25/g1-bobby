@@ -111,6 +111,7 @@ def test_unitree_state_ingest_and_readback(tmp_path: Path) -> None:
 
         runtime = client.get("/runtime")
         assert runtime.json()["unitree_state"]["updates"] == 1
+        assert runtime.json()["unitree_command_plan"]["available"] is False
 
 
 def test_websocket_rejects_invalid_token(tmp_path: Path) -> None:
@@ -257,6 +258,21 @@ def test_websocket_accepts_safe_manual_movement(tmp_path: Path) -> None:
             event = websocket.receive_json()
             assert event["type"] == "ack"
             assert event["seq"] == 3
+
+        plan = client.get("/unitree/command-plan")
+        assert plan.status_code == 200
+        assert plan.json()["action"] == "motion.velocity"
+        assert plan.json()["payload"]["angular_z"] == 0.0
+
+        runtime = client.get("/runtime")
+        assert runtime.json()["unitree_command_plan"]["available"] is True
+        assert runtime.json()["unitree_command_plan"]["plans"] == 3
+
+
+def test_unitree_command_plan_missing_before_any_accept(tmp_path: Path) -> None:
+    with TestClient(create_app(build_settings(tmp_path))) as client:
+        response = client.get("/unitree/command-plan")
+        assert response.status_code == 404
 
 
 def test_websocket_rejects_replayed_sequence(tmp_path: Path) -> None:

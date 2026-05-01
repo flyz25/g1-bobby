@@ -23,6 +23,7 @@ from .unitree import (
     UnitreeSampleAges,
     UnitreeSampleCounts,
 )
+from .unitree_command import UnitreeCommandPlan, translate_unitree_command
 
 __all__ = [
     "AckEvent",
@@ -45,4 +46,6 @@ __all__ = [
     "UnitreeDdsSnapshot",
     "UnitreeSampleAges",
     "UnitreeSampleCounts",
+    "UnitreeCommandPlan",
+    "translate_unitree_command",
 ]

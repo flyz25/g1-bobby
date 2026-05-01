@@ -8,7 +8,13 @@ from time import time
 from typing import Any
 
 from g1_bobby_adapters import RobotAdapter, create_robot_adapter
-from g1_bobby_contracts import RobotState, UnitreeDdsSnapshot
+from g1_bobby_contracts import (
+    CommandEnvelope,
+    RobotState,
+    UnitreeCommandPlan,
+    UnitreeDdsSnapshot,
+    translate_unitree_command,
+)
 from pydantic import ValidationError
 from g1_bobby_safety import SafetyValidator
 
@@ -25,12 +31,16 @@ class Runtime:
     active_operator_session_id: str | None = None
     unitree_state_updates: int = 0
     unitree_state_received_at: float | None = None
+    unitree_command_plans: int = 0
+    unitree_command_plan_recorded_at: float | None = None
     unitree_state_cache_path: Path = field(default_factory=lambda: Path(".runtime/unitree_state.json"))
     unitree_state_ttl_s: float = 2.0
     _unitree_state: UnitreeDdsSnapshot | None = field(default=None, init=False, repr=False)
+    _last_unitree_command_plan: UnitreeCommandPlan | None = field(default=None, init=False, repr=False)
     _unitree_state_restored: bool = field(default=False, init=False, repr=False)
     _operator_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     _unitree_state_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    _unitree_command_plan_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
     @classmethod
     async def create(cls, settings: Settings | None = None) -> "Runtime":
@@ -136,6 +146,26 @@ class Runtime:
     async def get_display_state(self) -> RobotState:
         state = await self.adapter.get_state()
         return self._project_state(state, await self.get_unitree_state())
+
+    async def record_unitree_command_plan(self, command: CommandEnvelope) -> UnitreeCommandPlan:
+        plan = translate_unitree_command(command)
+        async with self._unitree_command_plan_lock:
+            self._last_unitree_command_plan = plan
+            self.unitree_command_plans += 1
+            self.unitree_command_plan_recorded_at = time()
+        return plan
+
+    async def get_last_unitree_command_plan(self) -> UnitreeCommandPlan | None:
+        async with self._unitree_command_plan_lock:
+            return self._last_unitree_command_plan.model_copy(deep=True) if self._last_unitree_command_plan else None
+
+    async def unitree_command_plan_status(self) -> dict[str, object]:
+        async with self._unitree_command_plan_lock:
+            return {
+                "plans": self.unitree_command_plans,
+                "last_recorded_at": self.unitree_command_plan_recorded_at,
+                "available": self._last_unitree_command_plan is not None,
+            }
 
     async def unitree_state_status(self) -> dict[str, object]:
         async with self._unitree_state_lock:
