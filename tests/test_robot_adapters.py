@@ -17,6 +17,7 @@ from g1_bobby_adapters import (
     UnitreeAdapter,
     UnitreeAdapterConfig,
     UnitreeAdapterConfigurationError,
+    describe_unitree_transport_capability,
 )
 from g1_bobby_unitree_bridge.publisher_plan_stub import PlanStubUnitreeCommandPublisher
 
@@ -228,3 +229,24 @@ async def test_unitree_sdk_real_transport_reports_unimplemented_after_sdk_import
 
     with pytest.raises(UnitreeAdapterConfigurationError, match="DDS publisher skeleton"):
         await adapter.connect()
+
+
+def test_describe_unitree_transport_capability_reports_real_transport_blockers(monkeypatch) -> None:
+    monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
+    monkeypatch.setitem(__import__("sys").modules, "rclpy", SimpleNamespace())
+    capability = describe_unitree_transport_capability(
+        UnitreeAdapterConfig(
+            network_interface="eth0",
+            sdk_module="unitree_sdk_for_test",
+            enable_motor_commands=False,
+            command_transport="ros2_real",
+        ),
+        env={"ROS_DISTRO": "humble", "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp"},
+    )
+
+    assert capability.transport == "ros2_real"
+    assert capability.environment_ready is True
+    assert capability.binding_implemented is False
+    assert capability.ready is False
+    assert "G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS is false" in capability.blockers
+    assert "ros2_real publisher wiring is not implemented yet" in capability.blockers

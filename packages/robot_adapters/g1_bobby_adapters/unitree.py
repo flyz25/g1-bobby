@@ -3,9 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from importlib import import_module
 from time import time
+from typing import Mapping
 
 from g1_bobby_contracts.commands import CommandEnvelope
-from g1_bobby_contracts.unitree_command import UnitreeExecutionPlan, UnitreeExecutionResult
+from g1_bobby_contracts.unitree_command import (
+    UnitreeExecutionPlan,
+    UnitreeExecutionResult,
+    UnitreeTransportCapability,
+)
 from g1_bobby_contracts.state import ControlMode, RobotState
 
 from .unitree_transport import (
@@ -30,6 +35,73 @@ class UnitreeAdapterConfig:
     sdk_module: str = "unitree_sdk2py"
     enable_motor_commands: bool = False
     command_transport: str = "disabled"
+
+
+TRANSPORT_SUPPORTED_COMMAND_TYPES: dict[str, list[str]] = {
+    "disabled": ["heartbeat", "set_mode", "move_velocity", "stop", "estop"],
+    "dry_run": ["heartbeat", "set_mode", "move_velocity", "stop", "estop"],
+    "ros2_stub": ["heartbeat", "set_mode", "move_velocity", "stop", "estop"],
+    "ros2_plan_stub": ["set_mode", "move_velocity", "stop"],
+    "ros2_real": ["set_mode", "move_velocity", "stop"],
+    "sdk_plan_stub": ["set_mode", "move_velocity", "stop"],
+    "sdk_real": ["set_mode", "move_velocity", "stop"],
+}
+
+
+def describe_unitree_transport_capability(
+    config: UnitreeAdapterConfig,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> UnitreeTransportCapability:
+    transport = config.command_transport.lower()
+    probe_module = import_module("g1_bobby_unitree_bridge.probe")
+    checks = probe_module.build_probe_status(
+        env,
+        network_interface=config.network_interface,
+        sdk_module=config.sdk_module,
+    )
+    dependency_blockers: list[str] = []
+    if not config.network_interface:
+        dependency_blockers.append("G1_BOBBY_UNITREE_NETWORK_INTERFACE is not set")
+    if not checks.get("unitree_sdk_available"):
+        dependency_blockers.append(f"{config.sdk_module} is not importable")
+    if transport == "ros2_real":
+        if checks.get("ros_distro") != "humble":
+            dependency_blockers.append("ROS_DISTRO is not humble")
+        if checks.get("rmw_implementation") != "rmw_cyclonedds_cpp":
+            dependency_blockers.append("RMW_IMPLEMENTATION is not rmw_cyclonedds_cpp")
+        if not checks.get("rclpy_available"):
+            dependency_blockers.append("rclpy is not importable")
+
+    if transport == "disabled":
+        binding_implemented = False
+        implementation_blocker = "Unitree command transport is disabled"
+    elif transport in {"ros2_real", "sdk_real"}:
+        binding_implemented = False
+        implementation_blocker = f"{transport} publisher wiring is not implemented yet"
+    else:
+        binding_implemented = True
+        implementation_blocker = None
+
+    blockers = list(dependency_blockers)
+    if not config.enable_motor_commands:
+        blockers.append("G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS is false")
+    if implementation_blocker is not None:
+        blockers.append(implementation_blocker)
+
+    environment_ready = not dependency_blockers
+    ready = environment_ready and config.enable_motor_commands and binding_implemented
+    return UnitreeTransportCapability(
+        transport=transport,
+        supported_command_types=TRANSPORT_SUPPORTED_COMMAND_TYPES.get(transport, []),
+        configured=bool(config.network_interface),
+        environment_ready=environment_ready,
+        execution_enabled=config.enable_motor_commands,
+        binding_implemented=binding_implemented,
+        ready=ready,
+        blockers=blockers,
+        checks=dict(checks),
+    )
 
 
 class UnitreeAdapter:
@@ -176,3 +248,6 @@ class UnitreeAdapter:
         result = self._last_execution_result.model_copy(deep=True)
         self._last_execution_result = None
         return result
+
+    def transport_capability(self) -> UnitreeTransportCapability:
+        return describe_unitree_transport_capability(self.config)

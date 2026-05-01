@@ -16,7 +16,6 @@ Future hardware mode must provide:
 ```text
 G1_BOBBY_ROBOT_ADAPTER=unitree
 G1_BOBBY_UNITREE_NETWORK_INTERFACE=<robot-network-interface>
-G1_BOBBY_UNITREE_DDS_INTERFACE=<robot-network-interface>
 G1_BOBBY_UNITREE_SDK_MODULE=unitree_sdk2py
 G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS=false
 ```
@@ -118,16 +117,24 @@ The image is based on Ubuntu 22.04 / ROS2 Humble and builds:
 Local-only probe:
 
 ```bash
-G1_BOBBY_UNITREE_DDS_INTERFACE=lo \
+G1_BOBBY_UNITREE_NETWORK_INTERFACE=lo \
 docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2
 ```
 
 Robot/simulator probe:
 
 ```bash
-G1_BOBBY_UNITREE_DDS_INTERFACE=<robot-network-interface> \
+G1_BOBBY_UNITREE_NETWORK_INTERFACE=<robot-network-interface> \
 docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
   g1-bobby-unitree-probe --require-ready
+```
+
+Transport-specific capability probe:
+
+```bash
+G1_BOBBY_UNITREE_NETWORK_INTERFACE=<robot-network-interface> \
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  g1-bobby-unitree-probe --transport ros2_real
 ```
 
 Dry-run command translation, without DDS publish:
@@ -189,6 +196,12 @@ GET /unitree/execution-results
 ```
 
 For the current plan-backed stubs, that outcome is `status=stub_emitted`.
+
+The API also exposes the configured Unitree transport capability:
+
+```text
+GET /unitree/transport-capability
+```
 
 In WSL2, `eth0` is usually a NAT interface. DDS multicast to a physical robot
 may require WSL mirrored networking, a bridged adapter setup, or running this

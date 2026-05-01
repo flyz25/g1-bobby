@@ -35,6 +35,7 @@ from .unitree_command import (
     UnitreeExecutionPlanRecord,
     UnitreeExecutionResult,
     UnitreeExecutionResultRecord,
+    UnitreeTransportCapability,
     translate_unitree_command,
 )
 
@@ -70,5 +71,6 @@ __all__ = [
     "UnitreeExecutionPlanRecord",
     "UnitreeExecutionResult",
     "UnitreeExecutionResultRecord",
+    "UnitreeTransportCapability",
     "translate_unitree_command",
 ]

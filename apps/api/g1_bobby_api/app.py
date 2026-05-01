@@ -8,12 +8,14 @@ from typing import Callable
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from g1_bobby_adapters import describe_unitree_transport_capability
 from g1_bobby_contracts.events import StateEvent
 from g1_bobby_contracts import (
     RejectedCommandRecord,
     UnitreeCommandPlanRecord,
     UnitreeExecutionPlanRecord,
     UnitreeExecutionResultRecord,
+    UnitreeTransportCapability,
 )
 from g1_bobby_contracts.unitree import UnitreeDdsSnapshot
 
@@ -49,6 +51,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(websocket_router)
 
+    def unitree_transport_capability_for_runtime() -> UnitreeTransportCapability | None:
+        if str(app.state.settings.robot_adapter) != "unitree":
+            return None
+        return describe_unitree_transport_capability(app.state.settings.unitree_config())
+
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "online"}
@@ -56,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/runtime")
     async def runtime_status() -> dict[str, object]:
         runtime = app.state.runtime
+        transport_capability = unitree_transport_capability_for_runtime()
         return {
             "adapter": runtime.adapter_name,
             "safety": asdict(runtime.safety.limits),
@@ -67,6 +75,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "unitree_command_plan": await runtime.unitree_command_plan_status(),
             "unitree_execution_plan": await runtime.unitree_execution_plan_status(),
             "unitree_execution_result": await runtime.unitree_execution_result_status(),
+            "unitree_transport_capability": (
+                transport_capability.model_dump(mode="json") if transport_capability is not None else None
+            ),
             "rejected_command": await runtime.rejected_command_status(),
         }
 
@@ -117,6 +128,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/unitree/execution-results")
     async def unitree_execution_results() -> list[UnitreeExecutionResultRecord]:
         return await app.state.runtime.get_unitree_execution_result_history()
+
+    @app.get("/unitree/transport-capability")
+    async def unitree_transport_capability() -> UnitreeTransportCapability:
+        capability = unitree_transport_capability_for_runtime()
+        if capability is None:
+            raise HTTPException(status_code=404, detail="unitree transport capability is not available")
+        return capability
 
     @app.get("/operator/rejection")
     async def rejected_command() -> RejectedCommandRecord:

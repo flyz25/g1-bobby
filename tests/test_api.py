@@ -55,6 +55,7 @@ def test_health_and_state_endpoints(tmp_path: Path) -> None:
         assert runtime_body["unitree_state"]["status"] == "not_available"
         assert runtime_body["unitree_execution_plan"]["available"] is False
         assert runtime_body["unitree_execution_result"]["available"] is False
+        assert runtime_body["unitree_transport_capability"] is None
         assert runtime_body["rejected_command"]["available"] is False
 
         state = client.get("/state")
@@ -62,6 +63,8 @@ def test_health_and_state_endpoints(tmp_path: Path) -> None:
         body = state.json()
         assert body["type"] == "state"
         assert body["state"]["connected"] is True
+        capability = client.get("/unitree/transport-capability")
+        assert capability.status_code == 404
 
 
 def test_estop_and_reset_estop(tmp_path: Path) -> None:
@@ -143,6 +146,37 @@ def test_unitree_execution_result_endpoint_missing_before_any_accept(tmp_path: P
         history = client.get("/unitree/execution-results")
         assert history.status_code == 200
         assert history.json() == []
+
+
+def test_unitree_transport_capability_endpoint_reports_current_unitree_transport(tmp_path: Path) -> None:
+    settings = build_settings(
+        tmp_path,
+        robot_adapter="unitree",
+        unitree_network_interface="eth0",
+        unitree_sdk_module="unitree_sdk_for_test",
+        unitree_enable_motor_commands=True,
+        unitree_command_transport="dry_run",
+    )
+    import sys
+    from types import SimpleNamespace
+
+    sys.modules["unitree_sdk_for_test"] = SimpleNamespace()
+    try:
+        with TestClient(create_app(settings)) as client:
+            response = client.get("/unitree/transport-capability")
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["transport"] == "dry_run"
+            assert payload["configured"] is True
+            assert payload["execution_enabled"] is True
+            assert payload["binding_implemented"] is True
+            assert payload["ready"] is True
+
+            runtime = client.get("/runtime")
+            assert runtime.status_code == 200
+            assert runtime.json()["unitree_transport_capability"]["transport"] == "dry_run"
+    finally:
+        sys.modules.pop("unitree_sdk_for_test", None)
 
 
 def test_websocket_rejects_invalid_token(tmp_path: Path) -> None:

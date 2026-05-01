@@ -6,6 +6,7 @@ from .unitree import (
     UnitreeAdapterConfig,
     UnitreeAdapterConfigurationError,
     UnitreeAdapterError,
+    describe_unitree_transport_capability,
 )
 from .unitree_transport import (
     DisabledUnitreeCommandPublisher,
@@ -28,4 +29,5 @@ __all__ = [
     "UnitreeTransportConfigurationError",
     "UnitreeTransportError",
     "create_robot_adapter",
+    "describe_unitree_transport_capability",
 ]

@@ -167,6 +167,12 @@ http://localhost:8010/unitree/execution-result
 http://localhost:8010/unitree/execution-results
 ```
 
+Dan transport capability semasa untuk adapter Unitree:
+
+```text
+http://localhost:8010/unitree/transport-capability
+```
+
 Rejected-command audit juga tersedia di:
 
 ```text
@@ -252,8 +258,15 @@ Default DDS interface is `lo` for local probing. When a real robot or simulator
 network is reachable, set the DDS interface explicitly:
 
 ```bash
-G1_BOBBY_UNITREE_DDS_INTERFACE=eth0 \
+G1_BOBBY_UNITREE_NETWORK_INTERFACE=eth0 \
 docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2
+```
+
+Untuk probe transport-specific readiness:
+
+```bash
+g1-bobby-unitree-probe --transport ros2_real
+g1-bobby-unitree-probe --transport sdk_real --require-ready
 ```
 
 ## WebSocket

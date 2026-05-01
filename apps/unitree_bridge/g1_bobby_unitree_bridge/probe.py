@@ -16,10 +16,19 @@ def module_available(module_name: str) -> bool:
     return find_spec(module_name) is not None
 
 
-def build_probe_status(env: Mapping[str, str] | None = None) -> dict[str, object]:
+def build_probe_status(
+    env: Mapping[str, str] | None = None,
+    *,
+    network_interface: str | None = None,
+    sdk_module: str | None = None,
+) -> dict[str, object]:
     source_env = env or environ
-    sdk_module = source_env.get("G1_BOBBY_UNITREE_SDK_MODULE", "unitree_sdk2py")
-    dds_interface = source_env.get("G1_BOBBY_UNITREE_DDS_INTERFACE", "lo")
+    resolved_sdk_module = sdk_module or source_env.get("G1_BOBBY_UNITREE_SDK_MODULE", "unitree_sdk2py")
+    dds_interface = (
+        network_interface
+        or source_env.get("G1_BOBBY_UNITREE_NETWORK_INTERFACE")
+        or source_env.get("G1_BOBBY_UNITREE_DDS_INTERFACE", "lo")
+    )
 
     return {
         "ros_distro": source_env.get("ROS_DISTRO"),
@@ -27,8 +36,8 @@ def build_probe_status(env: Mapping[str, str] | None = None) -> dict[str, object
         "cyclonedds_uri": source_env.get("CYCLONEDDS_URI"),
         "dds_interface": dds_interface,
         "g1_bobby_api_url": source_env.get("G1_BOBBY_API_URL", "http://127.0.0.1:8010"),
-        "unitree_sdk_module": sdk_module,
-        "unitree_sdk_available": module_available(sdk_module),
+        "unitree_sdk_module": resolved_sdk_module,
+        "unitree_sdk_available": module_available(resolved_sdk_module),
         "rclpy_available": module_available("rclpy"),
         "motor_commands_enabled": is_truthy(
             source_env.get("G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS")
@@ -48,5 +57,5 @@ def readiness_errors(status: Mapping[str, object]) -> list[str]:
     if not status.get("unitree_sdk_available"):
         errors.append(f"{status.get('unitree_sdk_module')} is not importable")
     if not status.get("robot_network_selected"):
-        errors.append("G1_BOBBY_UNITREE_DDS_INTERFACE is still loopback/local")
+        errors.append("G1_BOBBY_UNITREE_NETWORK_INTERFACE is still loopback/local")
     return errors

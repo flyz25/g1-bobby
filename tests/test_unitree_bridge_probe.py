@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from g1_bobby_unitree_bridge.main import main
 from g1_bobby_unitree_bridge.probe import build_probe_status, is_truthy, readiness_errors
 
 
@@ -26,7 +27,7 @@ def test_build_probe_status_uses_environment(monkeypatch: pytest.MonkeyPatch) ->
             "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp",
             "CYCLONEDDS_URI": "file:///tmp/cyclonedds.xml",
             "G1_BOBBY_API_URL": "http://api:8010",
-            "G1_BOBBY_UNITREE_DDS_INTERFACE": "eth0",
+            "G1_BOBBY_UNITREE_NETWORK_INTERFACE": "eth0",
             "G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS": "false",
             "G1_BOBBY_UNITREE_SDK_MODULE": "unitree_sdk_for_test",
         }
@@ -58,4 +59,36 @@ def test_readiness_errors_reports_local_unready_environment() -> None:
     assert "RMW_IMPLEMENTATION is not rmw_cyclonedds_cpp" in errors
     assert "rclpy is not importable" in errors
     assert "unitree_sdk2py is not importable" in errors
-    assert "G1_BOBBY_UNITREE_DDS_INTERFACE is still loopback/local" in errors
+    assert "G1_BOBBY_UNITREE_NETWORK_INTERFACE is still loopback/local" in errors
+
+
+def test_probe_main_can_render_transport_capability(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    monkeypatch.setitem(sys.modules, "unitree_sdk_for_test", SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "rclpy", SimpleNamespace())
+    monkeypatch.setenv("ROS_DISTRO", "humble")
+    monkeypatch.setenv("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
+    monkeypatch.setenv("G1_BOBBY_UNITREE_NETWORK_INTERFACE", "eth0")
+    monkeypatch.setenv("G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS", "true")
+    monkeypatch.setenv("G1_BOBBY_UNITREE_SDK_MODULE", "unitree_sdk_for_test")
+
+    exit_code = main(["--transport", "ros2_real"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert '"transport": "ros2_real"' in captured.out
+    assert '"environment_ready": true' in captured.out
+    assert '"binding_implemented": false' in captured.out
+
+
+def test_probe_main_require_ready_fails_for_unimplemented_real_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "unitree_sdk_for_test", SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "rclpy", SimpleNamespace())
+    monkeypatch.setenv("ROS_DISTRO", "humble")
+    monkeypatch.setenv("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp")
+    monkeypatch.setenv("G1_BOBBY_UNITREE_NETWORK_INTERFACE", "eth0")
+    monkeypatch.setenv("G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS", "true")
+    monkeypatch.setenv("G1_BOBBY_UNITREE_SDK_MODULE", "unitree_sdk_for_test")
+
+    assert main(["--transport", "ros2_real", "--require-ready"]) == 2

@@ -4,11 +4,26 @@ import argparse
 import json
 import sys
 
+from g1_bobby_adapters import UnitreeAdapterConfig, describe_unitree_transport_capability
+
 from .probe import build_probe_status, readiness_errors
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Probe the Unitree ROS2 bridge environment.")
+    parser.add_argument(
+        "--transport",
+        choices=(
+            "disabled",
+            "dry_run",
+            "ros2_stub",
+            "ros2_plan_stub",
+            "ros2_real",
+            "sdk_plan_stub",
+            "sdk_real",
+        ),
+        help="Render transport-specific capability for the selected Unitree command transport.",
+    )
     parser.add_argument(
         "--require-ready",
         action="store_true",
@@ -26,9 +41,26 @@ def main(argv: list[str] | None = None) -> int:
         "checks": status,
         "errors": errors,
     }
+    capability = None
+    if args.transport:
+        capability = describe_unitree_transport_capability(
+            UnitreeAdapterConfig(
+                network_interface=str(status["dds_interface"]),
+                sdk_module=str(status["unitree_sdk_module"]),
+                enable_motor_commands=bool(status["motor_commands_enabled"]),
+                command_transport=args.transport,
+            )
+        )
+        payload["transport_capability"] = capability.model_dump(mode="json")
+        if capability.ready:
+            payload["transport_status"] = "ready"
+        elif capability.environment_ready:
+            payload["transport_status"] = "blocked"
+        else:
+            payload["transport_status"] = "not_ready"
     print(json.dumps(payload, indent=2, sort_keys=True))
 
-    if args.require_ready and errors:
+    if args.require_ready and (errors or (capability is not None and not capability.ready)):
         return 2
     return 0
 

@@ -70,6 +70,20 @@ class UnitreeExecutionResultRecord(BaseModel):
     execution_result: UnitreeExecutionResult
 
 
+class UnitreeTransportCapability(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    transport: str
+    supported_command_types: list[str] = Field(default_factory=list)
+    configured: bool
+    environment_ready: bool
+    execution_enabled: bool
+    binding_implemented: bool
+    ready: bool
+    blockers: list[str] = Field(default_factory=list)
+    checks: dict[str, Any] = Field(default_factory=dict)
+
+
 def translate_unitree_command(command: CommandEnvelope) -> UnitreeCommandPlan:
     if command.type == CommandType.HEARTBEAT:
         return UnitreeCommandPlan(
