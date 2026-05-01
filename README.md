@@ -281,6 +281,11 @@ skeleton. It verifies `rclpy` importability and then exits with a clear
 "publisher not implemented yet" error until native ROS2 topic/action wiring is
 added.
 
+`G1_BOBBY_UNITREE_COMMAND_TRANSPORT=sdk_real` now exists as a fail-closed
+Unitree SDK/DDS skeleton. It verifies `unitree_sdk2py` importability and then
+exits with a clear DDS wiring error until native G1 command topic/service
+binding is implemented.
+
 No real motor command should bypass:
 
 ```text

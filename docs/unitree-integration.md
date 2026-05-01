@@ -59,6 +59,7 @@ Inside that adapter boundary, the current repo now supports two transport modes:
 - `dry_run`: publishable Unitree translation path without DDS publish or hardware actuation
 - `ros2_stub`: bridge-side publish stub without DDS publish or hardware actuation
 - `ros2_real`: fail-closed ROS2 publisher skeleton that checks `rclpy` and then stops until native ROS2 wiring exists
+- `sdk_real`: fail-closed Unitree SDK/DDS publisher skeleton that checks `unitree_sdk2py` and then stops until native G1 DDS wiring exists
 
 This is still not the real ROS2 or SDK transport binding. It is the software
 seam that future publisher wiring will implement.

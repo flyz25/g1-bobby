@@ -70,6 +70,12 @@ class UnitreeAdapter:
         if normalized == "ros2_real":
             module = import_module("g1_bobby_unitree_bridge.publisher_ros2")
             return module.Ros2RealUnitreeCommandPublisher()
+        if normalized == "sdk_real":
+            module = import_module("g1_bobby_unitree_bridge.publisher_sdk")
+            return module.SdkRealUnitreeCommandPublisher(
+                sdk_module=self.config.sdk_module,
+                network_interface=self.config.network_interface,
+            )
         raise UnitreeAdapterConfigurationError(f"unsupported Unitree command transport: {transport}")
 
     async def connect(self) -> None:

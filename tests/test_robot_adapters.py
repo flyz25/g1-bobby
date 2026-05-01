@@ -142,3 +142,30 @@ async def test_unitree_ros2_real_transport_reports_unimplemented_after_rclpy(mon
 
     with pytest.raises(UnitreeAdapterConfigurationError, match="not implemented yet"):
         await adapter.connect()
+
+
+async def test_unitree_sdk_real_transport_requires_sdk_module(monkeypatch) -> None:
+    adapter = UnitreeAdapter(
+        UnitreeAdapterConfig(
+            network_interface="eth0",
+            sdk_module="missing_unitree_sdk_for_test",
+            command_transport="sdk_real",
+        ),
+    )
+
+    with pytest.raises(UnitreeAdapterConfigurationError, match="not installed"):
+        await adapter.connect()
+
+
+async def test_unitree_sdk_real_transport_reports_unimplemented_after_sdk_import(monkeypatch) -> None:
+    monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
+    adapter = UnitreeAdapter(
+        UnitreeAdapterConfig(
+            network_interface="eth0",
+            sdk_module="unitree_sdk_for_test",
+            command_transport="sdk_real",
+        ),
+    )
+
+    with pytest.raises(UnitreeAdapterConfigurationError, match="DDS publisher skeleton"):
+        await adapter.connect()
