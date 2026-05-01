@@ -70,6 +70,12 @@ g1-bobby-operator --script samples/operator_messages.jsonl
 The CLI prints concise event summaries by default. Use `--raw` to keep the
 original JSON event stream.
 
+Read-only monitor mode, without sending demo commands:
+
+```bash
+g1-bobby-operator --url ws://127.0.0.1:8010/ws/operator --telemetry-only --listen-s 5
+```
+
 ## Unitree ROS2 Container
 
 The robot stack runs in a separate Ubuntu 22.04 / ROS2 Humble container so WSL

@@ -33,6 +33,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--delay-s", type=float, default=0.05, help="Delay between commands")
     parser.add_argument("--listen-s", type=float, default=0.0, help="Listen for telemetry after send")
     parser.add_argument("--timeout-s", type=float, default=5.0, help="Connect/receive timeout")
+    parser.add_argument(
+        "--telemetry-only",
+        action="store_true",
+        help="Connect read-only and listen without sending demo or script commands",
+    )
     parser.add_argument("--raw", action="store_true", help="Print raw JSON events")
     return parser
 
@@ -116,15 +121,28 @@ def print_event(raw_text: str, raw: bool = False) -> None:
     print(format_event(raw_text, raw=raw))
 
 
+def build_outbound_messages(args: argparse.Namespace) -> list[dict[str, Any]]:
+    if args.telemetry_only:
+        return []
+    if args.script is not None:
+        messages = load_jsonl_messages(args.script)
+        if not args.keep_script_timestamps:
+            messages = refresh_message_timestamps(messages)
+        return messages
+    return demo_messages(client_id=args.client_id)
+
+
+def effective_listen_s(args: argparse.Namespace) -> float:
+    if args.listen_s > 0:
+        return args.listen_s
+    if args.telemetry_only:
+        return args.timeout_s
+    return 0.0
+
+
 async def run(args: argparse.Namespace) -> int:
     url = attach_token(args.url, args.token)
-    messages = (
-        load_jsonl_messages(args.script)
-        if args.script is not None
-        else demo_messages(client_id=args.client_id)
-    )
-    if args.script is not None and not args.keep_script_timestamps:
-        messages = refresh_message_timestamps(messages)
+    messages = build_outbound_messages(args)
 
     async with websockets.connect(url, open_timeout=args.timeout_s) as websocket:
         print_event(await receive_event(websocket, args.timeout_s), raw=args.raw)
@@ -134,8 +152,9 @@ async def run(args: argparse.Namespace) -> int:
             if args.delay_s > 0:
                 await asyncio.sleep(args.delay_s)
 
-        if args.listen_s > 0:
-            listen_until = asyncio.get_running_loop().time() + args.listen_s
+        listen_s = effective_listen_s(args)
+        if listen_s > 0:
+            listen_until = asyncio.get_running_loop().time() + listen_s
             while True:
                 timeout_s = listen_until - asyncio.get_running_loop().time()
                 if timeout_s <= 0:

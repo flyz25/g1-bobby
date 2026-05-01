@@ -1,8 +1,9 @@
+import argparse
 from pathlib import Path
 
 import pytest
 
-from g1_bobby_operator_cli.main import format_event
+from g1_bobby_operator_cli.main import build_outbound_messages, effective_listen_s, format_event
 from g1_bobby_operator_cli.messages import (
     attach_token,
     demo_messages,
@@ -109,3 +110,43 @@ def test_format_event_can_preserve_raw_json() -> None:
     raw = '{"type":"ack","seq":1}'
 
     assert format_event(raw, raw=True) == raw
+
+
+def test_build_outbound_messages_uses_telemetry_only_mode() -> None:
+    args = argparse.Namespace(
+        telemetry_only=True,
+        script=None,
+        keep_script_timestamps=False,
+        client_id="quest-test",
+    )
+
+    assert build_outbound_messages(args) == []
+
+
+def test_build_outbound_messages_uses_demo_when_not_telemetry_only() -> None:
+    args = argparse.Namespace(
+        telemetry_only=False,
+        script=None,
+        keep_script_timestamps=False,
+        client_id="quest-test",
+    )
+
+    messages = build_outbound_messages(args)
+    assert [message["type"] for message in messages] == [
+        "heartbeat",
+        "set_mode",
+        "move_velocity",
+        "stop",
+    ]
+
+
+def test_effective_listen_s_defaults_to_timeout_for_telemetry_only() -> None:
+    args = argparse.Namespace(listen_s=0.0, telemetry_only=True, timeout_s=3.5)
+
+    assert effective_listen_s(args) == 3.5
+
+
+def test_effective_listen_s_prefers_explicit_value() -> None:
+    args = argparse.Namespace(listen_s=1.25, telemetry_only=True, timeout_s=3.5)
+
+    assert effective_listen_s(args) == 1.25
