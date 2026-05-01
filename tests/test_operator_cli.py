@@ -1,7 +1,10 @@
 import argparse
+import asyncio
+import json
 from pathlib import Path
 
 import pytest
+import websockets
 
 from g1_bobby_operator_cli.main import (
     build_outbound_messages,
@@ -15,6 +18,7 @@ from g1_bobby_operator_cli.main import (
     persist_resume_after_id,
     current_after_id,
     resolve_ws_url,
+    run,
     should_replay_messages,
     should_retry,
 )
@@ -378,3 +382,63 @@ def test_resolve_ws_url_appends_after_id_for_audit_stream() -> None:
 def test_current_after_id_prefers_resume_checkpoint() -> None:
     args = argparse.Namespace(after_id=4, _resume_after_id=9)
     assert current_after_id(args) == 9
+
+
+@pytest.mark.asyncio
+async def test_run_formats_reject_with_execution_result(capsys) -> None:
+    event = {
+        "type": "reject",
+        "seq": 8,
+        "code": "execution_failed",
+        "reason": "transport disabled",
+        "unitree_execution_result": {
+            "event_id": 14,
+            "recorded_at": 125.0,
+            "source": "live",
+            "stale": False,
+            "execution_result": {
+                "transport": "disabled",
+                "command_type": "set_mode",
+                "status": "blocked",
+                "target": "disabled",
+                "detail": "transport disabled because the command transport is disabled",
+            },
+        },
+    }
+
+    async def handler(websocket) -> None:
+        await websocket.send(json.dumps(event))
+        await asyncio.sleep(0.1)
+
+    async with websockets.serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        args = argparse.Namespace(
+            url=f"ws://127.0.0.1:{port}/ws/operator",
+            audit_url=None,
+            token="dev-operator-token",
+            client_id="operator-cli",
+            script=None,
+            keep_script_timestamps=False,
+            delay_s=0.0,
+            listen_s=0.0,
+            timeout_s=0.05,
+            telemetry_only=False,
+            audit_stream=True,
+            after_id=0,
+            resume_file=None,
+            resume_reset=False,
+            resume_status=False,
+            resume_clear=False,
+            watch=False,
+            reconnect_delay_s=1.0,
+            raw=False,
+        )
+
+        assert await run(args) == 0
+
+    captured = capsys.readouterr()
+    assert (
+        "reject seq=8 code=execution_failed reason=transport disabled "
+        "[result_id=14 status=blocked transport=disabled target=disabled "
+        "detail=transport disabled because the command transp...]" in captured.out
+    )
