@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 g1-bobby-operator = "g1_bobby_operator_cli.main:main"
+g1-bobby-unitree-probe = "g1_bobby_unitree_bridge.main:main"
 
 [build-system]
 requires = ["setuptools>=75.0.0"]
@@ -30,6 +31,7 @@ asyncio_mode = "auto"
 pythonpath = [
     "apps/api",
     "apps/operator_cli",
+    "apps/unitree_bridge",
     "packages/contracts",
     "packages/safety",
     "packages/robot_adapters",
@@ -43,6 +45,7 @@ line-length = 100
 where = [
     "apps/api",
     "apps/operator_cli",
+    "apps/unitree_bridge",
     "packages/contracts",
     "packages/safety",
     "packages/robot_adapters",

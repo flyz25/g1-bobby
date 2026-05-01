@@ -67,6 +67,24 @@ Run a JSONL command script with fresh timestamps:
 g1-bobby-operator --script samples/operator_messages.jsonl
 ```
 
+## Unitree ROS2 Container
+
+The robot stack runs in a separate Ubuntu 22.04 / ROS2 Humble container so WSL
+Ubuntu 24.04 stays clean:
+
+```bash
+docker compose -f compose.unitree.yml --profile unitree build unitree-ros2
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2
+```
+
+Default DDS interface is `lo` for local probing. When a real robot or simulator
+network is reachable, set the DDS interface explicitly:
+
+```bash
+G1_BOBBY_UNITREE_DDS_INTERFACE=eth0 \
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2
+```
+
 ## WebSocket
 
 Endpoint:

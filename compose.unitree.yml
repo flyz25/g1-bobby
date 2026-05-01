@@ -1,0 +1,24 @@
+services:
+  unitree-ros2:
+    profiles:
+      - unitree
+    build:
+      context: .
+      dockerfile: docker/unitree-ros2/Dockerfile
+      args:
+        UNITREE_ROS2_REF: ${UNITREE_ROS2_REF:-master}
+        UNITREE_SDK2_PYTHON_REF: ${UNITREE_SDK2_PYTHON_REF:-master}
+        CYCLONEDDS_REF: ${CYCLONEDDS_REF:-releases/0.10.x}
+    image: g1-bobby-unitree-ros2:humble
+    network_mode: host
+    ipc: host
+    environment:
+      G1_BOBBY_API_URL: ${G1_BOBBY_API_URL:-http://127.0.0.1:8010}
+      G1_BOBBY_UNITREE_DDS_INTERFACE: ${G1_BOBBY_UNITREE_DDS_INTERFACE:-lo}
+      G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS: ${G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS:-false}
+      G1_BOBBY_UNITREE_SDK_MODULE: ${G1_BOBBY_UNITREE_SDK_MODULE:-unitree_sdk2py}
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+    volumes:
+      - .:/workspace/g1-bobby
+    working_dir: /workspace/g1-bobby
+    command: g1-bobby-unitree-probe

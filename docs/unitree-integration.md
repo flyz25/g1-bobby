@@ -16,6 +16,7 @@ Future hardware mode must provide:
 ```text
 G1_BOBBY_ROBOT_ADAPTER=unitree
 G1_BOBBY_UNITREE_NETWORK_INTERFACE=<robot-network-interface>
+G1_BOBBY_UNITREE_DDS_INTERFACE=<robot-network-interface>
 G1_BOBBY_UNITREE_SDK_MODULE=unitree_sdk2py
 G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS=false
 ```
@@ -51,3 +52,39 @@ The local planning guide keeps the same architecture rule: Quest/WebSocket
 commands enter FastAPI first, then schema validation, safety validation, and
 only then a ROS2 or Unitree SDK command boundary. LLM or operator input must not
 connect directly to motor control.
+
+## Docker ROS2/Unitree Environment
+
+Use the dedicated container instead of installing ROS2 Humble natively on WSL
+Ubuntu 24.04:
+
+```bash
+docker compose -f compose.unitree.yml --profile unitree build unitree-ros2
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2
+```
+
+The image is based on Ubuntu 22.04 / ROS2 Humble and builds:
+
+- CycloneDDS `releases/0.10.x`
+- Unitree ROS2 packages from `unitreerobotics/unitree_ros2`
+- Unitree SDK2 Python from `unitreerobotics/unitree_sdk2_python`
+- `g1-bobby-unitree-probe`
+
+Local-only probe:
+
+```bash
+G1_BOBBY_UNITREE_DDS_INTERFACE=lo \
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2
+```
+
+Robot/simulator probe:
+
+```bash
+G1_BOBBY_UNITREE_DDS_INTERFACE=<robot-network-interface> \
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  g1-bobby-unitree-probe --require-ready
+```
+
+In WSL2, `eth0` is usually a NAT interface. DDS multicast to a physical robot
+may require WSL mirrored networking, a bridged adapter setup, or running this
+container on a native Linux host connected to the robot network.
