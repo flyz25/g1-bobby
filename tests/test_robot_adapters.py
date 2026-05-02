@@ -189,7 +189,7 @@ async def test_unitree_ros2_real_transport_requires_rclpy(monkeypatch) -> None:
         await adapter.connect()
 
 
-async def test_unitree_ros2_real_transport_reports_unimplemented_after_rclpy(monkeypatch) -> None:
+async def test_unitree_ros2_real_transport_requires_request_module_after_rclpy(monkeypatch) -> None:
     monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
     monkeypatch.setitem(__import__("sys").modules, "rclpy", SimpleNamespace())
     adapter = UnitreeAdapter(
@@ -200,7 +200,7 @@ async def test_unitree_ros2_real_transport_reports_unimplemented_after_rclpy(mon
         ),
     )
 
-    with pytest.raises(UnitreeAdapterConfigurationError, match="not implemented yet"):
+    with pytest.raises(UnitreeAdapterConfigurationError, match="unitree_api.msg"):
         await adapter.connect()
 
 

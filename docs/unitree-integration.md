@@ -57,7 +57,7 @@ Inside that adapter boundary, the current repo now supports two transport modes:
 - `disabled`: fail-closed default
 - `dry_run`: publishable Unitree translation path without DDS publish or hardware actuation
 - `ros2_stub`: bridge-side publish stub without DDS publish or hardware actuation
-- `ros2_real`: fail-closed ROS2 publisher skeleton that checks `rclpy` and then stops until native ROS2 wiring exists
+- `ros2_real`: partial-live ROS2 publisher for confirmed sport-request control; lowcmd control remains blocked
 - `sdk_real`: fail-closed Unitree SDK/DDS publisher skeleton that checks `unitree_sdk2py` and then stops until native G1 DDS wiring exists
 
 This is still not the real ROS2 or SDK transport binding. It is the software
@@ -69,12 +69,15 @@ Current confirmed ROS2 binding intents in the repo are:
 - `move_velocity` -> `/lowcmd` with `LowCmd`
 - `stop` -> `/lowcmd` with `LowCmd`
 
-These are still audit-grade binding targets only. `heartbeat` and `estop` do
-not yet have a confirmed ROS2 publish surface in this repo, so `ros2_real`
-continues to fail closed for them.
+At the moment, `ros2_real` can publish `set_mode` live through
+`/api/sport/request` when `rclpy` and `unitree_api.msg.Request` are available.
+`move_velocity` and `stop` still remain blocked on `ros2_real`, and
+`heartbeat` / `estop` still do not have a confirmed ROS2 publish surface in
+this repo.
 
 The current repo also builds a concrete ROS2 publish-plan skeleton for these
-commands, but it does not execute any live ROS2 publish yet.
+commands. Live ROS2 publish now exists only for the sport-request `set_mode`
+path.
 
 Current confirmed Unitree SDK/DDS binding intents in the repo are:
 

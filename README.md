@@ -325,19 +325,22 @@ G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS=true
 `G1_BOBBY_UNITREE_COMMAND_TRANSPORT=ros2_stub` now routes through the bridge-side
 publisher stub instead of the adapter-local dry-run publisher.
 
-`G1_BOBBY_UNITREE_COMMAND_TRANSPORT=ros2_real` now exists as a fail-closed
-skeleton. It verifies `rclpy` importability and then exits with a clear
-"publisher not implemented yet" error until native ROS2 topic/action wiring is
-added.
+`G1_BOBBY_UNITREE_COMMAND_TRANSPORT=ros2_real` now supports partial live ROS2
+publishing for sport requests. When `rclpy` and `unitree_api.msg.Request` are
+available, `set_mode` can publish to `/api/sport/request`. Low-level velocity
+and stop control still remain blocked until the G1 lowcmd path is wired with
+enough confidence.
 
 That ROS2 skeleton is now narrowed to the current confirmed G1 intents:
 
 - `set_mode` -> `/api/sport/request` (`unitree_api/msg/Request`)
 - `move_velocity` / `stop` -> `/lowcmd` (`LowCmd`)
 
-Those bindings are still fail-closed. They document the current best-known
-target surfaces from official Unitree material, but no live ROS2 publish occurs
-yet.
+At the moment:
+
+- `set_mode` can publish live over ROS2 sport request
+- `move_velocity` / `stop` still fail closed on `ros2_real`
+- `heartbeat` / `estop` still have no confirmed ROS2 publish surface in this repo
 
 The repo now also builds a concrete ROS2 publish-plan skeleton for those
 bindings, so the remaining gap is runtime publisher wiring rather than command
