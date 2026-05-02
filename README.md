@@ -367,19 +367,18 @@ shape discovery.
 For execution rehearsal without ROS2 runtime, `ros2_plan_stub` now consumes that
 same publish-plan builder and emits the rendered plan as a stub result.
 
-`G1_BOBBY_UNITREE_COMMAND_TRANSPORT=sdk_real` now exists as a fail-closed
-Unitree SDK/DDS skeleton. It verifies `unitree_sdk2py` importability and then
-exits with a clear DDS wiring error until native G1 command topic/service
-binding is implemented.
+`G1_BOBBY_UNITREE_COMMAND_TRANSPORT=sdk_real` now executes through
+`unitree_sdk2py` G1 loco client bindings when the runtime is available.
 
-That SDK/DDS skeleton is now narrowed to the current confirmed G1 intents:
+That SDK/DDS path is now narrowed to the current confirmed G1 intents:
 
-- `set_mode` -> SportClient/basic service request
-- `move_velocity` / `stop` -> `rt/lowcmd` (`unitree_hg.msg.dds_.LowCmd_`)
+- `set_mode` -> `unitree_sdk2py.g1.loco.LocoClient.SetFsmId`
+- `move_velocity` / `stop` -> `unitree_sdk2py.g1.loco.LocoClient.SetVelocity`
 
-These bindings are still fail-closed. They track the current best-known
-high-level and low-level SDK surfaces from official Unitree SDK material, but no
-live DDS command publish occurs yet.
+These bindings now execute real SDK request/response calls through the G1 loco
+client. On the current MuJoCo simulator runtime, those calls return
+`RPC_ERR_CLIENT_SEND`, which indicates the simulator does not expose the
+matching SDK RPC service path even though DDS state topics are alive.
 
 The repo now also builds a concrete SDK publish-plan skeleton for those
 bindings, so the remaining gap is native DDS client/publisher execution.

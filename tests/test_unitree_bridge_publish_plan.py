@@ -36,8 +36,8 @@ def test_publish_plan_cli_renders_sdk_real_plan(capsys) -> None:
     assert exit_code == 0
     payload = json.loads(captured.out)
     assert payload["transport"] == "sdk_real"
-    assert payload["plans"][0]["plan"]["binding_target"] == "SportClient/basic service request"
-    assert payload["plans"][0]["plan"]["payload"]["operation"] == "switch_mode"
+    assert payload["plans"][0]["plan"]["binding_target"] == "unitree_sdk2py.g1.loco.LocoClient.SetFsmId"
+    assert payload["plans"][0]["plan"]["payload"]["operation"] == "SetFsmId"
 
 
 def test_publish_plan_cli_rejects_unbound_command(capsys) -> None:

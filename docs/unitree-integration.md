@@ -58,10 +58,10 @@ Inside that adapter boundary, the current repo now supports two transport modes:
 - `dry_run`: publishable Unitree translation path without DDS publish or hardware actuation
 - `ros2_stub`: bridge-side publish stub without DDS publish or hardware actuation
 - `ros2_real`: live G1 loco ROS2 request publisher for confirmed `/api/sport/request` control
-- `sdk_real`: fail-closed Unitree SDK/DDS publisher skeleton that checks `unitree_sdk2py` and then stops until native G1 DDS wiring exists
+- `sdk_real`: live `unitree_sdk2py` G1 loco client publisher for confirmed request/response control
 
-This is still not the real ROS2 or SDK transport binding. It is the software
-seam that future publisher wiring will implement.
+This is still not full robot actuation validation. It is the software transport
+seam plus the currently confirmed live request paths.
 
 Current confirmed ROS2 binding intents in the repo are:
 
@@ -79,16 +79,21 @@ commands. Live ROS2 publish now exists for the confirmed G1 loco request path.
 
 Current confirmed Unitree SDK/DDS binding intents in the repo are:
 
-- `set_mode` -> `SportClient/basic service request`
-- `move_velocity` -> `rt/lowcmd` with `unitree_hg.msg.dds_.LowCmd_`
-- `stop` -> `rt/lowcmd` with `unitree_hg.msg.dds_.LowCmd_`
+- `set_mode` -> `unitree_sdk2py.g1.loco.LocoClient.SetFsmId`
+- `move_velocity` -> `unitree_sdk2py.g1.loco.LocoClient.SetVelocity`
+- `stop` -> `unitree_sdk2py.g1.loco.LocoClient.SetVelocity`
 
-These are still audit-grade SDK binding targets only. `heartbeat` and `estop`
-do not yet have a confirmed DDS publish surface in this repo, so `sdk_real`
-continues to fail closed for them.
+These now execute real SDK request/response calls through `unitree_sdk2py`.
+`heartbeat` and `estop` do not yet have a confirmed SDK publish surface in this
+repo, so `sdk_real` still fails closed for them.
 
-The current repo also builds a concrete SDK publish-plan skeleton for these
-commands, but it does not execute any live DDS publish yet.
+Observed simulator behavior with the current Unitree MuJoCo image:
+
+- DDS state topics such as `rt/lowstate` and `rt/sportmodestate` are active.
+- `sdk_real` reaches `unitree_sdk2py.g1.loco.LocoClient`, but calls such as
+  `SetFsmId` and `SetVelocity` return `3102 (RPC_ERR_CLIENT_SEND)`.
+- That points to the simulator not exposing the matching SDK RPC service path,
+  even though DDS state transport is alive.
 
 ## Docker ROS2/Unitree Environment
 

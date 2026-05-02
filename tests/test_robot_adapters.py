@@ -170,8 +170,8 @@ async def test_unitree_sdk_plan_stub_transport_executes_publish_plan(monkeypatch
             )
         )
         emitted = publisher.emitted_plans()
-        assert emitted[0].target == "SportClient/basic service request"
-        assert emitted[0].payload["operation"] == "switch_mode"
+        assert emitted[0].target == "unitree_sdk2py.g1.loco.LocoClient.SetFsmId"
+        assert emitted[0].payload["operation"] == "SetFsmId"
     finally:
         await adapter.disconnect()
 
@@ -220,6 +220,16 @@ async def test_unitree_sdk_real_transport_requires_sdk_module(monkeypatch) -> No
 
 async def test_unitree_sdk_real_transport_reports_unimplemented_after_sdk_import(monkeypatch) -> None:
     monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "unitree_sdk2py.core.channel",
+        SimpleNamespace(ChannelFactoryInitialize=lambda domain_id, iface=None: None),
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "unitree_sdk2py.g1.loco.g1_loco_client",
+        SimpleNamespace(LocoClient=lambda: SimpleNamespace(SetTimeout=lambda timeout: None, Init=lambda: None)),
+    )
     adapter = UnitreeAdapter(
         UnitreeAdapterConfig(
             network_interface="eth0",
@@ -228,8 +238,13 @@ async def test_unitree_sdk_real_transport_reports_unimplemented_after_sdk_import
         ),
     )
 
-    with pytest.raises(UnitreeAdapterConfigurationError, match="DDS publisher skeleton"):
-        await adapter.connect()
+    await adapter.connect()
+    try:
+        state = await adapter.get_state()
+        assert state.connected is True
+        assert state.pose_label == "unitree-sdk_real"
+    finally:
+        await adapter.disconnect()
 
 
 async def test_unitree_disabled_transport_records_blocked_execution_result(monkeypatch) -> None:
