@@ -54,6 +54,34 @@
           </div>
         </section>
 
+        <section class="band diagnostics-band">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Diagnostics</h2>
+              <div class="inline-actions">
+                <span id="diagnostic-updated" class="stamp">-</span>
+                <button id="run-lowcmd-probe" title="Run active lowcmd write probe">◈</button>
+              </div>
+            </div>
+            <dl class="metric-grid" id="diagnostic-metrics"></dl>
+            <div id="diagnostic-summary" class="chips"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Lowcmd Templates</h2>
+              <span id="lowcmd-template-count" class="stamp">0</span>
+            </div>
+            <div id="lowcmd-template-history" class="history-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Diagnostic JSON</h2>
+              <span id="lowcmd-probe-status" class="stamp">-</span>
+            </div>
+            <pre id="diagnostic-json" class="json-view"></pre>
+          </div>
+        </section>
+
         <section class="band command-band">
           <div class="panel">
             <div class="panel-header">

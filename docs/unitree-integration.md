@@ -144,6 +144,9 @@ docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
 
 docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
   g1-bobby-unitree-probe --network-interface eth0 --probe-lowcmd-write
+
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  g1-bobby-unitree-diagnostic-report --network-interface eth0 --transport sdk_real --probe-lowcmd-write
 ```
 
 Dry-run command translation, without DDS publish:
@@ -210,6 +213,16 @@ docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
 That path emits structurally valid `unitree_hg.msg.dds_.LowCmd_` frames to
 `rt/lowcmd` with a computed CRC. It is intentionally narrower than the teleop
 spine: it proves DDS publishability, not safe high-level motion control.
+
+The API now also exposes:
+
+```text
+GET /unitree/diagnostic-report
+GET /unitree/lowcmd-templates
+```
+
+The operator dashboard consumes the same report so transport blockers, current
+readiness, and lowcmd probe results are visible without leaving `/dashboard`.
 
 At runtime, the API stores the latest accepted dry-run plan and exposes it via:
 

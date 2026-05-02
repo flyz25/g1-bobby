@@ -21,6 +21,8 @@ from g1_bobby_contracts import (
     UnitreeTransportCapability,
 )
 from g1_bobby_contracts.unitree import UnitreeDdsSnapshot
+from g1_bobby_unitree_bridge.diagnostic_report import build_unitree_diagnostic_report
+from g1_bobby_unitree_bridge.publish_lowcmd import list_lowcmd_templates
 
 from .config import Settings
 from .runtime import Runtime
@@ -149,6 +151,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if capability is None:
             raise HTTPException(status_code=404, detail="unitree transport capability is not available")
         return capability
+
+    @app.get("/unitree/lowcmd-templates")
+    async def unitree_lowcmd_templates() -> list[dict[str, object]]:
+        return list_lowcmd_templates()
+
+    @app.get("/unitree/diagnostic-report")
+    async def unitree_diagnostic_report(
+        probe_lowcmd_write: bool = False,
+    ) -> dict[str, object]:
+        transport = None
+        if str(app.state.settings.robot_adapter) == "unitree":
+            transport = str(app.state.settings.unitree_command_transport)
+        report = await build_unitree_diagnostic_report(
+            transport=transport,
+            network_interface=app.state.settings.unitree_network_interface,
+            sdk_module=app.state.settings.unitree_sdk_module,
+            probe_lowcmd_write=probe_lowcmd_write,
+        )
+        report["runtime_summary"] = {
+            "adapter": app.state.runtime.adapter_name,
+            "accepted_commands": app.state.runtime.accepted_commands,
+            "rejected_commands": app.state.runtime.rejected_commands,
+            "active_operator_connected": app.state.runtime.active_operator_connected,
+            "unitree_state": await app.state.runtime.unitree_state_status(),
+            "unitree_execution_result": await app.state.runtime.unitree_execution_result_status(),
+        }
+        return report
 
     @app.get("/operator/rejection")
     async def rejected_command() -> RejectedCommandRecord:

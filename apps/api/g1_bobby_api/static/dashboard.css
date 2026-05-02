@@ -74,6 +74,10 @@ input {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.diagnostics-band {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .detail-band,
 .audit-band,
 .command-band {
@@ -263,6 +267,7 @@ button.danger {
 
 @media (max-width: 1100px) {
   .status-band,
+  .diagnostics-band,
   .detail-band,
   .audit-band,
   .history-band,

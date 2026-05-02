@@ -29,6 +29,11 @@ Operator dashboard:
 http://localhost:8010/dashboard
 ```
 
+Dashboard sekarang juga ada diagnostics panel untuk:
+- consolidated Unitree readiness report
+- lowcmd template preview
+- active lowcmd write probe trigger
+
 Runtime status:
 
 ```text
@@ -177,6 +182,13 @@ CLI ini hanya emit `unitree_hg.msg.dds_.LowCmd_` neutral frame dengan CRC sah
 ke `rt/lowcmd`. Ia berguna untuk sahkan surface DDS publish wujud, bukan untuk
 claim locomotion atau joint actuation sudah validated.
 
+Consolidated diagnostic report, termasuk transport capability dan optional
+active `rt/lowcmd` write probe:
+
+```bash
+g1-bobby-unitree-diagnostic-report --network-interface eth0 --transport sdk_real --probe-lowcmd-write
+```
+
 The API also exposes the latest accepted dry-run translation at:
 
 ```text
@@ -207,6 +219,13 @@ Dan transport capability semasa untuk adapter Unitree:
 
 ```text
 http://localhost:8010/unitree/transport-capability
+```
+
+Diagnostic report dan lowcmd template catalog juga tersedia di:
+
+```text
+http://localhost:8010/unitree/diagnostic-report
+http://localhost:8010/unitree/lowcmd-templates
 ```
 
 Rejected-command audit juga tersedia di:

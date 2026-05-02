@@ -13,6 +13,7 @@
     runtimeUpdated: document.getElementById("runtime-updated"),
     stateUpdated: document.getElementById("state-updated"),
     transportUpdated: document.getElementById("transport-updated"),
+    diagnosticUpdated: document.getElementById("diagnostic-updated"),
     commandStatus: document.getElementById("command-status"),
     telemetrySummary: document.getElementById("telemetry-summary"),
     unitreeSummary: document.getElementById("unitree-summary"),
@@ -21,11 +22,17 @@
     runtimeMetrics: document.getElementById("runtime-metrics"),
     stateMetrics: document.getElementById("state-metrics"),
     transportMetrics: document.getElementById("transport-metrics"),
+    diagnosticMetrics: document.getElementById("diagnostic-metrics"),
+    diagnosticSummary: document.getElementById("diagnostic-summary"),
     transportBlockers: document.getElementById("transport-blockers"),
     stateJson: document.getElementById("state-json"),
     unitreeJson: document.getElementById("unitree-json"),
+    diagnosticJson: document.getElementById("diagnostic-json"),
     operatorEvents: document.getElementById("operator-events"),
     auditEvents: document.getElementById("audit-events"),
+    lowcmdTemplateHistory: document.getElementById("lowcmd-template-history"),
+    lowcmdTemplateCount: document.getElementById("lowcmd-template-count"),
+    lowcmdProbeStatus: document.getElementById("lowcmd-probe-status"),
     commandPlanHistory: document.getElementById("command-plan-history"),
     executionPlanHistory: document.getElementById("execution-plan-history"),
     executionResultHistory: document.getElementById("execution-result-history"),
@@ -130,6 +137,23 @@
     return `${snapshot.status} ${snapshot.source || "live"}${snapshot.stale ? " stale" : ""}`;
   }
 
+  function setChips(target, items) {
+    target.replaceChildren();
+    if (!items.length) {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.textContent = "clear";
+      target.append(chip);
+      return;
+    }
+    items.forEach((item) => {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.textContent = item;
+      target.append(chip);
+    });
+  }
+
   async function refreshRuntime() {
     const runtime = await api("/runtime").then((r) => r.json());
     state.lastRuntime = runtime;
@@ -193,6 +217,49 @@
     setJson(els.unitreeJson, payload.unitree_state);
   }
 
+  async function refreshDiagnostics(probeLowcmdWrite) {
+    const query = probeLowcmdWrite ? "?probe_lowcmd_write=true" : "";
+    const payload = await api(`/unitree/diagnostic-report${query}`).then((r) => r.json());
+    els.diagnosticUpdated.textContent = nowIso();
+    els.lowcmdProbeStatus.textContent = payload.lowcmd_write_probe
+      ? payload.lowcmd_write_probe.status
+      : "idle";
+    setMetrics(els.diagnosticMetrics, [
+      ["Status", payload.status],
+      ["Errors", String((payload.errors || []).length)],
+      ["Templates", String((payload.lowcmd_templates || []).length)],
+      [
+        "Lowcmd probe",
+        payload.lowcmd_write_probe ? String(payload.lowcmd_write_probe.status) : "not_run",
+      ],
+      [
+        "State updates",
+        String(payload.runtime_summary?.unitree_state?.updates ?? 0),
+      ],
+      [
+        "Exec results",
+        String(payload.runtime_summary?.unitree_execution_result?.results ?? 0),
+      ],
+    ]);
+    setChips(
+      els.diagnosticSummary,
+      [
+        ...(payload.errors || []),
+        ...((payload.transport_capability && payload.transport_capability.blockers) || []),
+      ]
+    );
+    els.lowcmdTemplateCount.textContent = String((payload.lowcmd_templates || []).length);
+    addEntries(
+      els.lowcmdTemplateHistory,
+      (payload.lowcmd_templates || []).map((item) => ({
+        left: item.name,
+        right: item.defaults.topic,
+        body: `${item.description} ${JSON.stringify(item.defaults)}`,
+      }))
+    );
+    setJson(els.diagnosticJson, payload);
+  }
+
   async function refreshHistory() {
     const [commandPlans, executionPlans, executionResults, rejections] = await Promise.all([
       api("/unitree/command-plans").then((r) => r.json()),
@@ -254,7 +321,7 @@
 
   async function refreshAll() {
     try {
-      await Promise.all([refreshRuntime(), refreshState(), refreshHistory()]);
+      await Promise.all([refreshRuntime(), refreshState(), refreshHistory(), refreshDiagnostics(false)]);
       els.connectionSummary.textContent = "synced";
     } catch (error) {
       els.connectionSummary.textContent = `sync error`;
@@ -360,6 +427,11 @@
   }
 
   document.getElementById("refresh-all").addEventListener("click", refreshAll);
+  document.getElementById("run-lowcmd-probe").addEventListener("click", function () {
+    refreshDiagnostics(true).catch((error) => {
+      addLog(els.operatorEvents, "diagnostic-error", { message: String(error) });
+    });
+  });
   document.getElementById("connect-operator").addEventListener("click", function () {
     connectSocket("operator");
   });

@@ -21,6 +21,32 @@ class HgLowCmdFramePlan:
     crc: int
 
 
+LOWCMD_TEMPLATE_SPECS: tuple[dict[str, object], ...] = (
+    {
+        "name": "neutral_probe",
+        "description": "Zeroed HG lowcmd frame for DDS write-acceptance diagnostics only.",
+        "defaults": {
+            "topic": "rt/lowcmd",
+            "mode_pr": 0,
+            "mode_machine": 0,
+            "motor_mode": 0,
+            "motor_count": 35,
+        },
+    },
+)
+
+
+def list_lowcmd_templates() -> list[dict[str, object]]:
+    return [
+        {
+            "name": str(template["name"]),
+            "description": str(template["description"]),
+            "defaults": dict(template["defaults"]),
+        }
+        for template in LOWCMD_TEMPLATE_SPECS
+    ]
+
+
 class HgLowCmdProbePublisher:
     """Emit neutral HG lowcmd DDS frames for simulator/runtime diagnosis.
 
@@ -175,6 +201,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--network-interface", required=True, help="DDS network interface.")
     parser.add_argument(
+        "--template",
+        default="neutral_probe",
+        choices=tuple(str(item["name"]) for item in LOWCMD_TEMPLATE_SPECS),
+        help="Named lowcmd template to emit.",
+    )
+    parser.add_argument(
         "--sdk-module",
         default="unitree_sdk2py",
         help="SDK module name for DDS transport helpers.",
@@ -229,13 +261,22 @@ async def _run_publish(args: argparse.Namespace) -> dict[str, Any]:
     )
     await publisher.connect()
     try:
+        template_defaults = next(
+            dict(item["defaults"])
+            for item in LOWCMD_TEMPLATE_SPECS
+            if item["name"] == args.template
+        )
         frames = []
         write_success = True
         for index in range(args.count):
             frame = await publisher.publish_neutral_frame(
-                mode_pr=args.mode_pr,
-                mode_machine=args.mode_machine,
-                motor_mode=args.motor_mode,
+                mode_pr=args.mode_pr if args.mode_pr != 0 else int(template_defaults["mode_pr"]),
+                mode_machine=(
+                    args.mode_machine
+                    if args.mode_machine != 0
+                    else int(template_defaults["mode_machine"])
+                ),
+                motor_mode=args.motor_mode if args.motor_mode != 0 else int(template_defaults["motor_mode"]),
             )
             frames.append(frame)
             if frame["write_result"] is False:
@@ -250,6 +291,7 @@ async def _run_publish(args: argparse.Namespace) -> dict[str, Any]:
             "status": "ok" if write_success else "write_rejected",
             "topic": args.topic,
             "count": args.count,
+            "template": args.template,
             "write_success": write_success,
             "frames": frames,
         }

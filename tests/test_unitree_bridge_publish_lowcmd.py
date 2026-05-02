@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from g1_bobby_adapters.unitree_transport import UnitreeTransportConfigurationError
-from g1_bobby_unitree_bridge.publish_lowcmd import HgLowCmdProbePublisher, main
+from g1_bobby_unitree_bridge.publish_lowcmd import HgLowCmdProbePublisher, list_lowcmd_templates, main
 
 
 class _FakeMotorCmd:
@@ -159,6 +159,7 @@ def test_publish_lowcmd_cli_emits_json(capsys, monkeypatch: pytest.MonkeyPatch) 
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "ok"
     assert payload["count"] == 2
+    assert payload["template"] == "neutral_probe"
     assert payload["write_success"] is True
     assert len(payload["frames"]) == 2
     assert payload["frames"][0]["mode_pr"] == 1
@@ -207,3 +208,21 @@ def test_publish_lowcmd_cli_can_require_successful_write(capsys, monkeypatch: py
 
     assert exit_code == 2
     assert "write was rejected on topic rt/lowcmd" in capsys.readouterr().err
+
+
+def test_list_lowcmd_templates_exposes_neutral_probe() -> None:
+    templates = list_lowcmd_templates()
+
+    assert templates == [
+        {
+            "name": "neutral_probe",
+            "description": "Zeroed HG lowcmd frame for DDS write-acceptance diagnostics only.",
+            "defaults": {
+                "topic": "rt/lowcmd",
+                "mode_pr": 0,
+                "mode_machine": 0,
+                "motor_mode": 0,
+                "motor_count": 35,
+            },
+        }
+    ]

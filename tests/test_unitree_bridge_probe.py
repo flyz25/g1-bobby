@@ -122,12 +122,19 @@ def test_probe_main_can_attempt_lowcmd_write(monkeypatch: pytest.MonkeyPatch, ca
     monkeypatch.setenv("G1_BOBBY_UNITREE_NETWORK_INTERFACE", "eth0")
     monkeypatch.setenv("G1_BOBBY_UNITREE_SDK_MODULE", "unitree_sdk_for_test")
 
-    async def fake_probe(interface: str, sdk_module: str):
-        assert interface == "eth0"
-        assert sdk_module == "unitree_sdk_for_test"
-        return {"topic": "rt/lowcmd", "write_result": False, "crc": 1}
+    async def fake_report(**kwargs):
+        assert kwargs["network_interface"] == "eth0"
+        assert kwargs["sdk_module"] == "unitree_sdk_for_test"
+        assert kwargs["probe_lowcmd_write"] is True
+        return {
+            "status": "blocked",
+            "checks": {},
+            "errors": [],
+            "lowcmd_templates": [],
+            "lowcmd_write_probe": {"topic": "rt/lowcmd", "write_result": False, "crc": 1, "status": "rejected"},
+        }
 
-    monkeypatch.setattr("g1_bobby_unitree_bridge.main._probe_lowcmd_write", fake_probe)
+    monkeypatch.setattr("g1_bobby_unitree_bridge.main.build_unitree_diagnostic_report", fake_report)
 
     exit_code = main(["--probe-lowcmd-write"])
 

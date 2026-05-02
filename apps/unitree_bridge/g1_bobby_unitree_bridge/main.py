@@ -7,7 +7,7 @@ import sys
 
 from g1_bobby_adapters import UnitreeAdapterConfig, describe_unitree_transport_capability
 
-from .publish_lowcmd import HgLowCmdProbePublisher
+from .diagnostic_report import build_unitree_diagnostic_report
 from .probe import build_probe_status, readiness_errors
 
 
@@ -43,16 +43,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def _probe_lowcmd_write(interface: str, sdk_module: str) -> dict[str, object]:
-    publisher = HgLowCmdProbePublisher(network_interface=interface, sdk_module=sdk_module)
-    await publisher.connect()
-    try:
-        result = await publisher.publish_neutral_frame()
-    finally:
-        await publisher.disconnect()
-    return result
-
-
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     status = build_probe_status(network_interface=args.network_interface)
@@ -80,25 +70,13 @@ def main(argv: list[str] | None = None) -> int:
         else:
             payload["transport_status"] = "not_ready"
     if args.probe_lowcmd_write:
-        try:
-            payload["lowcmd_write_probe"] = asyncio.run(
-                _probe_lowcmd_write(
-                    str(status["dds_interface"]),
-                    str(status["unitree_sdk_module"]),
-                )
+        payload["lowcmd_write_probe"] = asyncio.run(
+            build_unitree_diagnostic_report(
+                network_interface=str(status["dds_interface"]),
+                sdk_module=str(status["unitree_sdk_module"]),
+                probe_lowcmd_write=True,
             )
-        except Exception as exc:
-            payload["lowcmd_write_probe"] = {
-                "status": "error",
-                "detail": str(exc),
-                "topic": "rt/lowcmd",
-            }
-        else:
-            payload["lowcmd_write_probe"]["status"] = (
-                "accepted"
-                if payload["lowcmd_write_probe"].get("write_result") is not False
-                else "rejected"
-            )
+        )["lowcmd_write_probe"]
     print(json.dumps(payload, indent=2, sort_keys=True))
 
     if args.require_ready and (errors or (capability is not None and not capability.ready)):

@@ -54,6 +54,7 @@ def test_health_and_state_endpoints(tmp_path: Path) -> None:
         assert asset.status_code == 200
         assert "connectSocket" in asset.text
         assert "executionPlanHistory" in asset.text
+        assert "run-lowcmd-probe" in asset.text
 
         health = client.get("/health")
         assert health.status_code == 200
@@ -78,6 +79,17 @@ def test_health_and_state_endpoints(tmp_path: Path) -> None:
         assert body["state"]["connected"] is True
         capability = client.get("/unitree/transport-capability")
         assert capability.status_code == 404
+
+        lowcmd_templates = client.get("/unitree/lowcmd-templates")
+        assert lowcmd_templates.status_code == 200
+        assert lowcmd_templates.json()[0]["name"] == "neutral_probe"
+
+        diagnostic = client.get("/unitree/diagnostic-report")
+        assert diagnostic.status_code == 200
+        diagnostic_body = diagnostic.json()
+        assert diagnostic_body["lowcmd_templates"][0]["name"] == "neutral_probe"
+        assert diagnostic_body["runtime_summary"]["adapter"] == "mock"
+        assert "transport_capability" not in diagnostic_body
 
 
 def test_estop_and_reset_estop(tmp_path: Path) -> None:
@@ -188,8 +200,33 @@ def test_unitree_transport_capability_endpoint_reports_current_unitree_transport
             runtime = client.get("/runtime")
             assert runtime.status_code == 200
             assert runtime.json()["unitree_transport_capability"]["transport"] == "dry_run"
+
+            diagnostic = client.get("/unitree/diagnostic-report")
+            assert diagnostic.status_code == 200
+            assert diagnostic.json()["transport_capability"]["transport"] == "dry_run"
     finally:
         sys.modules.pop("unitree_sdk_for_test", None)
+
+
+def test_unitree_diagnostic_report_can_include_lowcmd_probe(tmp_path: Path, monkeypatch) -> None:
+    async def fake_report(**kwargs):
+        assert kwargs["probe_lowcmd_write"] is True
+        return {
+            "status": "blocked",
+            "checks": {"dds_interface": "eth0"},
+            "errors": [],
+            "lowcmd_templates": [{"name": "neutral_probe", "defaults": {"topic": "rt/lowcmd"}}],
+            "lowcmd_write_probe": {"status": "rejected", "topic": "rt/lowcmd", "write_result": False},
+        }
+
+    monkeypatch.setattr("g1_bobby_api.app.build_unitree_diagnostic_report", fake_report)
+
+    with TestClient(create_app(build_settings(tmp_path))) as client:
+        response = client.get("/unitree/diagnostic-report?probe_lowcmd_write=true")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "blocked"
+        assert payload["lowcmd_write_probe"]["status"] == "rejected"
 
 
 def test_websocket_rejects_invalid_token(tmp_path: Path) -> None:
