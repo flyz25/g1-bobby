@@ -154,6 +154,18 @@ g1-bobby-unitree-publish-live --transport ros2_real --command-json \
   '{"type":"set_mode","seq":1,"timestamp":123.0,"payload":{"mode":"manual"}}'
 ```
 
+Untuk tunggu response rasmi ROS2 request/response path:
+
+```bash
+g1-bobby-unitree-publish-live --transport ros2_real --response-timeout-s 2 \
+  --command-json '{"type":"set_mode","seq":1,"timestamp":123.0,"payload":{"mode":"manual"}}'
+```
+
+Pada simulator MuJoCo Unitree semasa, DDS state memang hidup tetapi `/api/sport/request`
+dan `/api/sport/response` tidak muncul sebagai endpoint ROS2 remote. Jadi mode
+`--response-timeout-s` akan fail jelas dan itu menandakan simulator ini bukan
+consumer untuk path `ros2_real`.
+
 The API also exposes the latest accepted dry-run translation at:
 
 ```text

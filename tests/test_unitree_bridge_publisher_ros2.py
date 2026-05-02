@@ -147,8 +147,12 @@ async def test_ros2_real_publisher_publishes_move_velocity(monkeypatch: pytest.M
         create_node=lambda name: fake_node,
     )
     monkeypatch.setitem(__import__("sys").modules, "rclpy", fake_rclpy)
-    monkeypatch.setitem(__import__("sys").modules, "unitree_api.msg", SimpleNamespace(Request=_FakeRequest))
-    publisher = Ros2RealUnitreeCommandPublisher()
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "unitree_api.msg",
+        SimpleNamespace(Request=_FakeRequest, Response=_FakeResponse),
+    )
+    publisher = Ros2RealUnitreeCommandPublisher(response_timeout_s=0.1)
 
     await publisher.connect()
     try:
@@ -169,6 +173,11 @@ async def test_ros2_real_publisher_publishes_move_velocity(monkeypatch: pytest.M
         message = fake_node.publisher.messages[0]
         assert message.header.identity.api_id == 7105
         assert message.parameter == '{"velocity": [0.1, 0.0, 0.0], "duration": 0.1}'
+        execution_result = publisher.consume_last_execution_result()
+        assert execution_result is not None
+        assert execution_result.status == "responded"
+        response = publisher.consume_last_response()
+        assert response == {"id": message.header.identity.id, "api_id": 7105, "status_code": 0, "data": {"ok": True}}
     finally:
         await publisher.disconnect()
 
@@ -196,21 +205,39 @@ async def test_ros2_real_publisher_rejects_unbound_heartbeat(
 
 class _FakeRequest:
     def __init__(self) -> None:
-        self.header = SimpleNamespace(identity=SimpleNamespace(api_id=None))
+        self.header = SimpleNamespace(identity=SimpleNamespace(api_id=None, id=None))
         self.parameter = None
 
 
+class _FakeResponse:
+    def __init__(self, request_id: int, api_id: int, code: int = 0, data: str = '{"ok": true}') -> None:
+        self.header = SimpleNamespace(
+            identity=SimpleNamespace(id=request_id, api_id=api_id),
+            status=SimpleNamespace(code=code),
+        )
+        self.data = data
+
+
 class _FakePublisher:
-    def __init__(self) -> None:
+    def __init__(self, node: "_FakeNode") -> None:
+        self.node = node
         self.messages = []
 
     def publish(self, message) -> None:
         self.messages.append(message)
+        if self.node.response_callback is not None:
+            self.node.response_callback(
+                _FakeResponse(
+                    request_id=message.header.identity.id,
+                    api_id=message.header.identity.api_id,
+                )
+            )
 
 
 class _FakeNode:
     def __init__(self) -> None:
-        self.publisher = _FakePublisher()
+        self.response_callback = None
+        self.publisher = _FakePublisher(self)
         self.destroyed = False
 
     def create_publisher(self, message_class, topic: str, qos_depth: int):
@@ -218,6 +245,19 @@ class _FakeNode:
         self.topic = topic
         self.qos_depth = qos_depth
         return self.publisher
+
+    def create_subscription(self, message_class, topic: str, callback, qos_depth: int):
+        self.subscription_message_class = message_class
+        self.subscription_topic = topic
+        self.subscription_qos_depth = qos_depth
+        self.response_callback = callback
+        return object()
+
+    def count_subscribers(self, topic: str) -> int:
+        return 0 if topic == "/api/sport/request" else 0
+
+    def count_publishers(self, topic: str) -> int:
+        return 0 if topic == "/api/sport/response" else 0
 
     def destroy_node(self) -> None:
         self.destroyed = True
@@ -234,8 +274,12 @@ async def test_ros2_real_publisher_connects_and_publishes_set_mode(monkeypatch: 
         create_node=lambda name: fake_node,
     )
     monkeypatch.setitem(__import__("sys").modules, "rclpy", fake_rclpy)
-    monkeypatch.setitem(__import__("sys").modules, "unitree_api.msg", SimpleNamespace(Request=_FakeRequest))
-    publisher = Ros2RealUnitreeCommandPublisher()
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "unitree_api.msg",
+        SimpleNamespace(Request=_FakeRequest, Response=_FakeResponse),
+    )
+    publisher = Ros2RealUnitreeCommandPublisher(response_timeout_s=0.1)
 
     await publisher.connect()
     try:
@@ -260,7 +304,10 @@ async def test_ros2_real_publisher_connects_and_publishes_set_mode(monkeypatch: 
         assert execution_plan.target == "/api/sport/request"
         execution_result = publisher.consume_last_execution_result()
         assert execution_result is not None
-        assert execution_result.status == "published"
+        assert execution_result.status == "responded"
+        response = publisher.consume_last_response()
+        assert response is not None
+        assert response["api_id"] == 7101
     finally:
         await publisher.disconnect()
     assert fake_node.destroyed is True
@@ -296,3 +343,41 @@ def test_build_ros2_publish_plan_rejects_unconfirmed_assist_mode() -> None:
                 payload=SetModePayload(mode="assist"),
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_ros2_real_publisher_times_out_without_matching_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_node = _FakeNode()
+    fake_rclpy = SimpleNamespace(
+        _ok=False,
+        init=lambda args=None: setattr(fake_rclpy, "_ok", True),
+        ok=lambda: getattr(fake_rclpy, "_ok"),
+        shutdown=lambda: setattr(fake_rclpy, "_ok", False),
+        create_node=lambda name: fake_node,
+        spin_once=lambda node, timeout_sec=0.0: None,
+    )
+    monkeypatch.setitem(__import__("sys").modules, "rclpy", fake_rclpy)
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "unitree_api.msg",
+        SimpleNamespace(Request=_FakeRequest, Response=_FakeResponse),
+    )
+    publisher = Ros2RealUnitreeCommandPublisher(response_timeout_s=0.01)
+
+    await publisher.connect()
+    fake_node.response_callback = lambda response: None
+    try:
+        with pytest.raises(
+            UnitreeTransportConfigurationError,
+            match="no remote ROS2 endpoints detected on /api/sport/request or /api/sport/response",
+        ):
+            await publisher.publish(
+                SetModeCommand(
+                    type=CommandType.SET_MODE,
+                    seq=1,
+                    timestamp=123.0,
+                    payload=SetModePayload(mode="manual"),
+                )
+            )
+    finally:
+        await publisher.disconnect()

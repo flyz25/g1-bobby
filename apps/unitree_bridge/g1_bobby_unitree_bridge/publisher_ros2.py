@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from time import monotonic, time_ns
 from dataclasses import asdict, dataclass
 from importlib import import_module
 from typing import Any
@@ -133,18 +134,28 @@ class Ros2RealUnitreeCommandPublisher:
         rclpy_module: str = "rclpy",
         request_module: str = "unitree_api.msg",
         request_class_name: str = "Request",
+        response_module: str = "unitree_api.msg",
+        response_class_name: str = "Response",
+        response_timeout_s: float = 0.0,
     ) -> None:
         self._rclpy_module = rclpy_module
         self._request_module = request_module
         self._request_class_name = request_class_name
+        self._response_module = response_module
+        self._response_class_name = response_class_name
+        self._response_timeout_s = response_timeout_s
         self._connected = False
         self._rclpy = None
         self._node = None
         self._sport_request_publisher = None
+        self._sport_response_subscription = None
         self._request_class = None
+        self._response_class = None
+        self._pending_responses: dict[int, Any] = {}
         self._next_event_id = 1
         self._last_execution_plan: UnitreeExecutionPlan | None = None
         self._last_execution_result: UnitreeExecutionResult | None = None
+        self._last_response: dict[str, Any] | None = None
 
     async def connect(self) -> None:
         try:
@@ -168,6 +179,19 @@ class Ros2RealUnitreeCommandPublisher:
             raise UnitreeTransportConfigurationError(
                 f"ROS2 message class '{self._request_class_name}' is not available in {self._request_module}"
             ) from exc
+        try:
+            response_module = import_module(self._response_module)
+            self._response_class = getattr(response_module, self._response_class_name)
+        except ModuleNotFoundError as exc:
+            if exc.name == self._response_module.split(".")[0]:
+                raise UnitreeTransportConfigurationError(
+                    f"ROS2 message module '{self._response_module}' is not installed"
+                ) from exc
+            raise
+        except AttributeError as exc:
+            raise UnitreeTransportConfigurationError(
+                f"ROS2 message class '{self._response_class_name}' is not available in {self._response_module}"
+            ) from exc
         if not hasattr(self._rclpy, "create_node"):
             raise UnitreeTransportConfigurationError(
                 "ROS2 Python module is present but does not expose create_node"
@@ -186,6 +210,13 @@ class Ros2RealUnitreeCommandPublisher:
             "/api/sport/request",
             10,
         )
+        if hasattr(self._node, "create_subscription"):
+            self._sport_response_subscription = self._node.create_subscription(
+                self._response_class,
+                "/api/sport/response",
+                self._handle_response,
+                10,
+            )
         self._connected = True
 
     async def disconnect(self) -> None:
@@ -196,8 +227,68 @@ class Ros2RealUnitreeCommandPublisher:
         if callable(shutdown_fn) and (not callable(ok_fn) or ok_fn()):
             shutdown_fn()
         self._sport_request_publisher = None
+        self._sport_response_subscription = None
         self._node = None
+        self._pending_responses.clear()
         self._connected = False
+
+    def _handle_response(self, response: Any) -> None:
+        identity = getattr(getattr(response, "header", None), "identity", None)
+        response_id = getattr(identity, "id", None)
+        if response_id is None:
+            return
+        self._pending_responses[int(response_id)] = response
+
+    def _response_payload(self, response: Any) -> dict[str, Any]:
+        header = getattr(response, "header", None)
+        identity = getattr(header, "identity", None)
+        status = getattr(header, "status", None)
+        raw_data = getattr(response, "data", "")
+        try:
+            data = json.loads(raw_data) if raw_data else None
+        except json.JSONDecodeError:
+            data = raw_data
+        return {
+            "id": int(getattr(identity, "id", 0)),
+            "api_id": int(getattr(identity, "api_id", 0)),
+            "status_code": int(getattr(status, "code", 0)),
+            "data": data,
+        }
+
+    def _wait_for_response(self, response_id: int) -> dict[str, Any] | None:
+        if self._response_timeout_s <= 0:
+            return None
+        spin_once = getattr(self._rclpy, "spin_once", None)
+        deadline = monotonic() + self._response_timeout_s
+        while monotonic() < deadline:
+            response = self._pending_responses.pop(response_id, None)
+            if response is not None:
+                return self._response_payload(response)
+            if callable(spin_once) and self._node is not None:
+                spin_once(self._node, timeout_sec=min(0.1, max(0.0, deadline - monotonic())))
+            else:
+                break
+        response = self._pending_responses.pop(response_id, None)
+        if response is not None:
+            return self._response_payload(response)
+        request_subscribers = None
+        response_publishers = None
+        if self._node is not None:
+            count_subscribers = getattr(self._node, "count_subscribers", None)
+            count_publishers = getattr(self._node, "count_publishers", None)
+            if callable(count_subscribers):
+                request_subscribers = count_subscribers("/api/sport/request")
+            if callable(count_publishers):
+                response_publishers = count_publishers("/api/sport/response")
+        if request_subscribers == 0 and response_publishers == 0:
+            raise UnitreeTransportConfigurationError(
+                "timed out waiting for ROS2 sport response for request "
+                f"id={response_id}; no remote ROS2 endpoints detected on "
+                "/api/sport/request or /api/sport/response"
+            )
+        raise UnitreeTransportConfigurationError(
+            f"timed out waiting for ROS2 sport response for request id={response_id}"
+        )
 
     async def publish(self, command: CommandEnvelope) -> UnitreeCommandPlanRecord:
         plan = build_ros2_publish_plan(command)
@@ -216,12 +307,16 @@ class Ros2RealUnitreeCommandPublisher:
         request = self._request_class()
         try:
             request.header.identity.api_id = int(plan.payload["api_id"])
+            request.header.identity.id = int(time_ns())
         except AttributeError as exc:
             raise UnitreeTransportConfigurationError(
-                "ROS2 Request message does not expose header.identity.api_id"
+                "ROS2 Request message does not expose header.identity.api_id/id"
             ) from exc
         setattr(request, "parameter", json.dumps(plan.payload["parameter"]))
+        request_id = int(request.header.identity.id)
         self._sport_request_publisher.publish(request)
+        response_payload = self._wait_for_response(request_id)
+        self._last_response = response_payload
 
         self._last_execution_plan = UnitreeExecutionPlan(
             transport="ros2_real",
@@ -235,9 +330,13 @@ class Ros2RealUnitreeCommandPublisher:
         self._last_execution_result = UnitreeExecutionResult(
             transport="ros2_real",
             command_type=plan.command_type,
-            status="published",
+            status="responded" if response_payload is not None else "published",
             target=plan.topic,
-            detail="published G1 loco request over ROS2",
+            detail=(
+                f"response code={response_payload['status_code']}"
+                if response_payload is not None
+                else "published G1 loco request over ROS2"
+            ),
         )
         record = build_unitree_command_plan_record(
             command,
@@ -260,3 +359,10 @@ class Ros2RealUnitreeCommandPublisher:
         result = self._last_execution_result.model_copy(deep=True)
         self._last_execution_result = None
         return result
+
+    def consume_last_response(self) -> dict[str, Any] | None:
+        if self._last_response is None:
+            return None
+        response = dict(self._last_response)
+        self._last_response = None
+        return response

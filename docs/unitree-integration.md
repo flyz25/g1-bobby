@@ -174,6 +174,23 @@ docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
   '{"type":"set_mode","seq":1,"timestamp":123.0,"payload":{"mode":"manual"}}'
 ```
 
+To wait for a matching ROS2 response:
+
+```bash
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  g1-bobby-unitree-publish-live --transport ros2_real --response-timeout-s 2 \
+  --command-json '{"type":"set_mode","seq":1,"timestamp":123.0,"payload":{"mode":"manual"}}'
+```
+
+Observed simulator behavior with the current Unitree MuJoCo image:
+
+- DDS state topics such as `rt/lowstate` and `rt/sportmodestate` are active.
+- The simulator does not expose remote ROS2 endpoints on `/api/sport/request`
+  or `/api/sport/response`.
+- Because of that, `ros2_real --response-timeout-s ...` fails clearly against
+  the simulator, which points to a transport mismatch rather than a malformed
+  request payload.
+
 At runtime, the API stores the latest accepted dry-run plan and exposes it via:
 
 ```text

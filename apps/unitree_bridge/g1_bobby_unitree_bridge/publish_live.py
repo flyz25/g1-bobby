@@ -43,6 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Pretty-print output JSON.",
     )
+    parser.add_argument(
+        "--response-timeout-s",
+        type=float,
+        default=0.0,
+        help="Wait for a matching ROS2 response for up to this many seconds. Disabled when 0.",
+    )
     return parser
 
 
@@ -75,7 +81,7 @@ def load_input_commands(args: argparse.Namespace) -> list[CommandEnvelope]:
 
 def build_publisher(args: argparse.Namespace):
     if args.transport == "ros2_real":
-        return Ros2RealUnitreeCommandPublisher()
+        return Ros2RealUnitreeCommandPublisher(response_timeout_s=args.response_timeout_s)
     return SdkRealUnitreeCommandPublisher(
         sdk_module=args.sdk_module,
         network_interface=args.network_interface,
@@ -90,6 +96,7 @@ async def _run_live_publish(args: argparse.Namespace) -> dict[str, Any]:
         records = []
         execution_plans = []
         execution_results = []
+        responses = []
         for command in commands:
             record = await publisher.publish(command)
             records.append(record.model_dump(mode="json"))
@@ -103,12 +110,18 @@ async def _run_live_publish(args: argparse.Namespace) -> dict[str, Any]:
                 execution_result = consume_execution_result()
                 if execution_result is not None:
                     execution_results.append(execution_result.model_dump(mode="json"))
+            consume_response = getattr(publisher, "consume_last_response", None)
+            if callable(consume_response):
+                response = consume_response()
+                if response is not None:
+                    responses.append(response)
         return {
             "status": "ok",
             "transport": args.transport,
             "records": records,
             "execution_plans": execution_plans,
             "execution_results": execution_results,
+            "responses": responses,
         }
     finally:
         await publisher.disconnect()
