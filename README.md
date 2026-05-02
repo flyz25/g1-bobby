@@ -58,9 +58,12 @@ Quick local targets:
 
 ```bash
 make dev-up
+make dev-stack
 make dev-doctor
 make unitree-report
 make unitree-sim-trace
+make unitree-dds-introspect
+make unitree-export-bundle
 ```
 
 Optional local Python workflow, if `python3.12-venv` is installed:
@@ -210,6 +213,18 @@ Trace the current simulator/runtime command surface into one classified report:
 g1-bobby-unitree-sim-trace --network-interface eth0 --transport sdk_real
 ```
 
+Inspect known DDS and ROS2 command/state surfaces with source-backed hints:
+
+```bash
+g1-bobby-unitree-dds-introspect --network-interface eth0 --transport sdk_real
+```
+
+Export one consolidated artifact bundle from the API:
+
+```bash
+g1-bobby-unitree-export-bundle --api-url http://127.0.0.1:8010
+```
+
 The API also exposes the latest accepted dry-run translation at:
 
 ```text
@@ -249,6 +264,9 @@ http://localhost:8010/unitree/diagnostic-report
 http://localhost:8010/unitree/lowcmd-templates
 http://localhost:8010/unitree/sim-trace
 http://localhost:8010/unitree/lowcmd-experiments
+http://localhost:8010/unitree/dds-introspection
+http://localhost:8010/unitree/source-trace
+http://localhost:8010/unitree/export-bundle
 ```
 
 Rejected-command audit juga tersedia di:

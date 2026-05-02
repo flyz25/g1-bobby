@@ -8,6 +8,7 @@
     lastDiagnostic: null,
     lastHistoryBundle: null,
     autoRefreshTimer: null,
+    diagnosticSnapshots: [],
   };
 
   const els = {
@@ -37,6 +38,10 @@
     lowcmdTemplateHistory: document.getElementById("lowcmd-template-history"),
     lowcmdTemplateCount: document.getElementById("lowcmd-template-count"),
     lowcmdProbeStatus: document.getElementById("lowcmd-probe-status"),
+    diagnosticSnapshots: document.getElementById("diagnostic-snapshots"),
+    diagnosticSnapshotCount: document.getElementById("diagnostic-snapshot-count"),
+    historySearch: document.getElementById("history-search"),
+    historyFailuresOnly: document.getElementById("history-failures-only"),
     commandPlanHistory: document.getElementById("command-plan-history"),
     executionPlanHistory: document.getElementById("execution-plan-history"),
     executionResultHistory: document.getElementById("execution-result-history"),
@@ -184,6 +189,39 @@
     URL.revokeObjectURL(href);
   }
 
+  function rememberDiagnosticSnapshot(payload, label) {
+    state.diagnosticSnapshots.unshift({
+      recorded_at: new Date().toISOString(),
+      label,
+      payload,
+    });
+    state.diagnosticSnapshots = state.diagnosticSnapshots.slice(0, 6);
+    els.diagnosticSnapshotCount.textContent = String(state.diagnosticSnapshots.length);
+    addEntries(
+      els.diagnosticSnapshots,
+      state.diagnosticSnapshots.map((item) => ({
+        left: item.label,
+        right: item.payload.classification || item.payload.status || "-",
+        body: item.recorded_at,
+      }))
+    );
+  }
+
+  function applyHistoryFilters(rows) {
+    const query = (els.historySearch.value || "").trim().toLowerCase();
+    const failuresOnly = els.historyFailuresOnly.checked;
+    return rows.filter((row) => {
+      const haystack = `${row.left} ${row.right} ${row.body}`.toLowerCase();
+      if (query && !haystack.includes(query)) {
+        return false;
+      }
+      if (!failuresOnly) {
+        return true;
+      }
+      return haystack.includes("reject") || haystack.includes("blocked") || haystack.includes("failed");
+    });
+  }
+
   async function loadHistoryBundle() {
     const [commandPlans, executionPlans, executionResults, rejections] = await Promise.all([
       api("/unitree/command-plans").then((r) => r.json()),
@@ -254,6 +292,7 @@
     const query = probeLowcmdWrite ? "?probe_lowcmd_write=true" : "";
     const payload = await api(`/unitree/diagnostic-report${query}`).then((r) => r.json());
     state.lastDiagnostic = payload;
+    rememberDiagnosticSnapshot(payload, probeLowcmdWrite ? "lowcmd-probe" : "diagnostic");
     els.diagnosticUpdated.textContent = nowIso();
     setStampState(
       els.lowcmdProbeStatus,
@@ -302,47 +341,55 @@
 
     addEntries(
       els.commandPlanHistory,
-      commandPlans
-        .slice()
-        .reverse()
-        .map((item) => ({
-          left: `#${item.event_id} ${item.plan.type}`,
-          right: item.plan.action,
-          body: JSON.stringify(item.plan.payload),
-        }))
+      applyHistoryFilters(
+        commandPlans
+          .slice()
+          .reverse()
+          .map((item) => ({
+            left: `#${item.event_id} ${item.plan.type}`,
+            right: item.plan.action,
+            body: JSON.stringify(item.plan.payload),
+          }))
+      )
     );
     addEntries(
       els.executionPlanHistory,
-      executionPlans
-        .slice()
-        .reverse()
-        .map((item) => ({
-          left: `#${item.event_id} ${item.execution_plan.command_type}`,
-          right: `${item.execution_plan.transport} ${item.execution_plan.target}`,
-          body: JSON.stringify(item.execution_plan.payload),
-        }))
+      applyHistoryFilters(
+        executionPlans
+          .slice()
+          .reverse()
+          .map((item) => ({
+            left: `#${item.event_id} ${item.execution_plan.command_type}`,
+            right: `${item.execution_plan.transport} ${item.execution_plan.target}`,
+            body: JSON.stringify(item.execution_plan.payload),
+          }))
+      )
     );
     addEntries(
       els.executionResultHistory,
-      executionResults
-        .slice()
-        .reverse()
-        .map((item) => ({
-          left: `#${item.event_id} ${item.execution_result.command_type}`,
-          right: `${item.execution_result.status} ${item.execution_result.transport}`,
-          body: `${item.execution_result.target} ${item.execution_result.detail}`,
-        }))
+      applyHistoryFilters(
+        executionResults
+          .slice()
+          .reverse()
+          .map((item) => ({
+            left: `#${item.event_id} ${item.execution_result.command_type}`,
+            right: `${item.execution_result.status} ${item.execution_result.transport}`,
+            body: `${item.execution_result.target} ${item.execution_result.detail}`,
+          }))
+      )
     );
     addEntries(
       els.rejectionHistory,
-      rejections
-        .slice()
-        .reverse()
-        .map((item) => ({
-          left: `#${item.event_id} ${item.command_type || "n/a"}`,
-          right: item.rejection.code,
-          body: item.rejection.reason,
-        }))
+      applyHistoryFilters(
+        rejections
+          .slice()
+          .reverse()
+          .map((item) => ({
+            left: `#${item.event_id} ${item.command_type || "n/a"}`,
+            right: item.rejection.code,
+            body: item.rejection.reason,
+          }))
+      )
     );
   }
 
@@ -467,6 +514,8 @@
 
   document.getElementById("refresh-all").addEventListener("click", refreshAll);
   document.getElementById("toggle-auto-refresh").addEventListener("click", applyAutoRefresh);
+  els.historySearch.addEventListener("input", refreshHistory);
+  els.historyFailuresOnly.addEventListener("change", refreshHistory);
   document.getElementById("run-lowcmd-probe").addEventListener("click", function () {
     refreshDiagnostics(true).catch((error) => {
       addLog(els.operatorEvents, "diagnostic-error", { message: String(error) });
@@ -481,11 +530,16 @@
     try {
       const payload = await api("/unitree/sim-trace").then((r) => r.json());
       state.lastDiagnostic = payload;
+      rememberDiagnosticSnapshot(payload, "sim-trace");
       setJson(els.diagnosticJson, payload);
       setStampState(els.lowcmdProbeStatus, payload.classification || payload.status);
     } catch (error) {
       addLog(els.operatorEvents, "sim-trace-error", { message: String(error) });
     }
+  });
+  document.getElementById("export-bundle").addEventListener("click", async function () {
+    const payload = await api("/unitree/export-bundle").then((r) => r.json());
+    downloadJson("g1-bobby-export-bundle.json", payload);
   });
   document.getElementById("export-audit-bundle").addEventListener("click", async function () {
     const payload = await loadHistoryBundle();

@@ -23,9 +23,11 @@ from g1_bobby_contracts import (
 from g1_bobby_contracts.unitree import UnitreeDdsSnapshot
 from g1_bobby_adapters.unitree_transport import UnitreeTransportConfigurationError
 from g1_bobby_unitree_bridge.diagnostic_report import build_unitree_diagnostic_report
+from g1_bobby_unitree_bridge.dds_introspection import build_dds_introspection_report
 from g1_bobby_unitree_bridge.lowcmd_experiments import _run_experiments as run_lowcmd_experiments
 from g1_bobby_unitree_bridge.publish_lowcmd import list_lowcmd_templates
 from g1_bobby_unitree_bridge.sim_trace import _run_trace as run_sim_trace
+from g1_bobby_unitree_bridge.source_trace import build_unitree_source_trace
 
 from .config import Settings
 from .runtime import Runtime
@@ -198,6 +200,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )()
         )
 
+    @app.get("/unitree/source-trace")
+    async def unitree_source_trace() -> dict[str, object]:
+        return build_unitree_source_trace()
+
+    @app.get("/unitree/dds-introspection")
+    async def unitree_dds_introspection() -> dict[str, object]:
+        transport = None
+        if str(app.state.settings.robot_adapter) == "unitree":
+            transport = str(app.state.settings.unitree_command_transport)
+        return await build_dds_introspection_report(
+            transport=transport,
+            network_interface=app.state.settings.unitree_network_interface,
+            sdk_module=app.state.settings.unitree_sdk_module,
+        )
+
     @app.get("/unitree/lowcmd-experiments")
     async def unitree_lowcmd_experiments(
         count: int = 3,
@@ -223,6 +240,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "cases": [],
                 "detail": str(exc),
             }
+
+    @app.get("/unitree/export-bundle")
+    async def unitree_export_bundle() -> dict[str, object]:
+        diagnostic = await unitree_diagnostic_report()
+        return {
+            "runtime": await runtime_status(),
+            "state": (await state()).model_dump(mode="json"),
+            "diagnostic_report": diagnostic,
+            "sim_trace": await unitree_sim_trace(),
+            "dds_introspection": await unitree_dds_introspection(),
+            "source_trace": await unitree_source_trace(),
+            "lowcmd_experiments": await unitree_lowcmd_experiments(),
+            "command_plans": [item.model_dump(mode="json") for item in await app.state.runtime.get_unitree_command_plan_history()],
+            "execution_plans": [item.model_dump(mode="json") for item in await app.state.runtime.get_unitree_execution_plan_history()],
+            "execution_results": [item.model_dump(mode="json") for item in await app.state.runtime.get_unitree_execution_result_history()],
+            "rejected_commands": [item.model_dump(mode="json") for item in await app.state.runtime.get_rejected_command_history()],
+        }
 
     @app.get("/operator/rejection")
     async def rejected_command() -> RejectedCommandRecord:

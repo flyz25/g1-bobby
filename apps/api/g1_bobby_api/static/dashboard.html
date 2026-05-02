@@ -85,9 +85,17 @@
               <div class="inline-actions">
                 <span id="lowcmd-probe-status" class="stamp">-</span>
                 <button id="run-sim-trace" title="Run simulator trace">⌁</button>
+                <button id="export-bundle" title="Export full bundle">⇲</button>
               </div>
             </div>
             <pre id="diagnostic-json" class="json-view"></pre>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Diagnostic Snapshots</h2>
+              <span id="diagnostic-snapshot-count" class="stamp">0</span>
+            </div>
+            <div id="diagnostic-snapshots" class="history-list"></div>
           </div>
         </section>
 
@@ -177,6 +185,21 @@
         </section>
 
         <section class="band history-band">
+          <div class="panel history-controls-panel">
+            <div class="panel-header">
+              <h2>History Filters</h2>
+            </div>
+            <div class="inline-actions">
+              <label class="field token-field">
+                <span>Search</span>
+                <input id="history-search" type="text" value="" />
+              </label>
+              <label class="field compact-field">
+                <span>Failures only</span>
+                <input id="history-failures-only" type="checkbox" />
+              </label>
+            </div>
+          </div>
           <div class="panel">
             <div class="panel-header">
               <h2>Command Plans</h2>

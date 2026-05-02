@@ -8,7 +8,9 @@ from typing import Any, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
+from .dds_introspection import build_dds_introspection_report
 from .diagnostic_report import build_unitree_diagnostic_report
+from .source_trace import build_unitree_source_trace
 
 
 def _fetch_json(url: str) -> dict[str, Any] | None:
@@ -63,12 +65,19 @@ async def _run_trace(args: argparse.Namespace) -> dict[str, Any]:
         sdk_module=args.sdk_module,
         probe_lowcmd_write=True,
     )
+    dds_introspection = await build_dds_introspection_report(
+        transport=args.transport,
+        network_interface=args.network_interface,
+        sdk_module=args.sdk_module,
+    )
     api_runtime = None if args.skip_api else _fetch_json(f"{args.api_url.rstrip('/')}/runtime")
     api_unitree_state = None if args.skip_api else _fetch_json(f"{args.api_url.rstrip('/')}/unitree/state")
     return {
         "status": diagnostic["status"],
         "classification": _classify(diagnostic, api_unitree_state),
         "diagnostic_report": diagnostic,
+        "dds_introspection": dds_introspection,
+        "source_trace": build_unitree_source_trace(),
         "api_runtime": api_runtime,
         "api_unitree_state": api_unitree_state,
     }

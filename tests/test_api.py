@@ -57,6 +57,8 @@ def test_health_and_state_endpoints(tmp_path: Path) -> None:
         assert "run-lowcmd-probe" in asset.text
         assert "export-audit-bundle" in asset.text
         assert "toggle-auto-refresh" in asset.text
+        assert "historyFailuresOnly" in asset.text
+        assert "export-bundle" in asset.text
 
         health = client.get("/health")
         assert health.status_code == 200
@@ -96,6 +98,19 @@ def test_health_and_state_endpoints(tmp_path: Path) -> None:
         sim_trace = client.get("/unitree/sim-trace")
         assert sim_trace.status_code == 200
         assert "classification" in sim_trace.json()
+
+        source_trace = client.get("/unitree/source-trace")
+        assert source_trace.status_code == 200
+        assert source_trace.json()["summary"]["confirmed"] >= 1
+
+        dds_introspection = client.get("/unitree/dds-introspection")
+        assert dds_introspection.status_code == 200
+        assert dds_introspection.json()["surfaces"][0]["topic"] == "rt/lowstate"
+
+        export_bundle = client.get("/unitree/export-bundle")
+        assert export_bundle.status_code == 200
+        assert "runtime" in export_bundle.json()
+        assert "sim_trace" in export_bundle.json()
 
 
 def test_estop_and_reset_estop(tmp_path: Path) -> None:
@@ -259,6 +274,18 @@ def test_unitree_lowcmd_experiments_endpoint_can_be_stubbed(tmp_path: Path, monk
         response = client.get("/unitree/lowcmd-experiments")
         assert response.status_code == 200
         assert response.json()["cases"][0]["template"] == "neutral_probe"
+
+
+def test_unitree_dds_introspection_endpoint_can_be_stubbed(tmp_path: Path, monkeypatch) -> None:
+    async def fake_report(**kwargs):
+        return {"status": "blocked", "surfaces": [{"topic": "rt/lowcmd", "status": "rejected"}]}
+
+    monkeypatch.setattr("g1_bobby_api.app.build_dds_introspection_report", fake_report)
+
+    with TestClient(create_app(build_settings(tmp_path))) as client:
+        response = client.get("/unitree/dds-introspection")
+        assert response.status_code == 200
+        assert response.json()["surfaces"][0]["topic"] == "rt/lowcmd"
 
 
 def test_websocket_rejects_invalid_token(tmp_path: Path) -> None:
