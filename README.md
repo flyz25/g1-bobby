@@ -166,6 +166,17 @@ dan `/api/sport/response` tidak muncul sebagai endpoint ROS2 remote. Jadi mode
 `--response-timeout-s` akan fail jelas dan itu menandakan simulator ini bukan
 consumer untuk path `ros2_real`.
 
+Untuk diagnose DDS `rt/lowcmd` secara terus tanpa memetakan teleop high-level ke
+joint command, guna neutral-frame publisher ini:
+
+```bash
+g1-bobby-unitree-publish-lowcmd --network-interface lo --count 5 --period-s 0.02
+```
+
+CLI ini hanya emit `unitree_hg.msg.dds_.LowCmd_` neutral frame dengan CRC sah
+ke `rt/lowcmd`. Ia berguna untuk sahkan surface DDS publish wujud, bukan untuk
+claim locomotion atau joint actuation sudah validated.
+
 The API also exposes the latest accepted dry-run translation at:
 
 ```text

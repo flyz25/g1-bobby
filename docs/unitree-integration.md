@@ -196,6 +196,18 @@ Observed simulator behavior with the current Unitree MuJoCo image:
   the simulator, which points to a transport mismatch rather than a malformed
   request payload.
 
+To probe the lower DDS surface directly, there is also a neutral HG lowcmd
+publisher:
+
+```bash
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  python3 -m g1_bobby_unitree_bridge.publish_lowcmd --network-interface lo --count 5
+```
+
+That path emits structurally valid `unitree_hg.msg.dds_.LowCmd_` frames to
+`rt/lowcmd` with a computed CRC. It is intentionally narrower than the teleop
+spine: it proves DDS publishability, not safe high-level motion control.
+
 At runtime, the API stores the latest accepted dry-run plan and exposes it via:
 
 ```text
