@@ -53,6 +53,7 @@ def test_health_and_state_endpoints(tmp_path: Path) -> None:
         asset = client.get("/assets/dashboard.js")
         assert asset.status_code == 200
         assert "connectSocket" in asset.text
+        assert "executionPlanHistory" in asset.text
 
         health = client.get("/health")
         assert health.status_code == 200

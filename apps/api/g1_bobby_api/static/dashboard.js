@@ -27,9 +27,11 @@
     operatorEvents: document.getElementById("operator-events"),
     auditEvents: document.getElementById("audit-events"),
     commandPlanHistory: document.getElementById("command-plan-history"),
+    executionPlanHistory: document.getElementById("execution-plan-history"),
     executionResultHistory: document.getElementById("execution-result-history"),
     rejectionHistory: document.getElementById("rejection-history"),
     commandPlanCount: document.getElementById("command-plan-count"),
+    executionPlanCount: document.getElementById("execution-plan-count"),
     executionResultCount: document.getElementById("execution-result-count"),
     rejectionCount: document.getElementById("rejection-count"),
     linearX: document.getElementById("linear-x"),
@@ -192,13 +194,15 @@
   }
 
   async function refreshHistory() {
-    const [commandPlans, executionResults, rejections] = await Promise.all([
+    const [commandPlans, executionPlans, executionResults, rejections] = await Promise.all([
       api("/unitree/command-plans").then((r) => r.json()),
+      api("/unitree/execution-plans").then((r) => r.json()),
       api("/unitree/execution-results").then((r) => r.json()),
       api("/operator/rejections").then((r) => r.json()),
     ]);
 
     els.commandPlanCount.textContent = String(commandPlans.length);
+    els.executionPlanCount.textContent = String(executionPlans.length);
     els.executionResultCount.textContent = String(executionResults.length);
     els.rejectionCount.textContent = String(rejections.length);
 
@@ -211,6 +215,17 @@
           left: `#${item.event_id} ${item.plan.type}`,
           right: item.plan.action,
           body: JSON.stringify(item.plan.payload),
+        }))
+    );
+    addEntries(
+      els.executionPlanHistory,
+      executionPlans
+        .slice()
+        .reverse()
+        .map((item) => ({
+          left: `#${item.event_id} ${item.execution_plan.command_type}`,
+          right: `${item.execution_plan.transport} ${item.execution_plan.target}`,
+          body: JSON.stringify(item.execution_plan.payload),
         }))
     );
     addEntries(
