@@ -303,6 +303,7 @@ Untuk probe transport-specific readiness:
 ```bash
 g1-bobby-unitree-probe --transport ros2_real
 g1-bobby-unitree-probe --transport sdk_real --require-ready
+g1-bobby-unitree-probe --network-interface eth0 --probe-lowcmd-write
 ```
 
 ## WebSocket

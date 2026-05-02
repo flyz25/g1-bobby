@@ -141,6 +141,9 @@ Transport-specific capability probe:
 G1_BOBBY_UNITREE_NETWORK_INTERFACE=<robot-network-interface> \
 docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
   g1-bobby-unitree-probe --transport ros2_real
+
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  g1-bobby-unitree-probe --network-interface eth0 --probe-lowcmd-write
 ```
 
 Dry-run command translation, without DDS publish:

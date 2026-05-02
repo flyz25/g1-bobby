@@ -43,6 +43,8 @@ def build_probe_status(
         "unitree_sdk_available": module_available(resolved_sdk_module),
         "rclpy_available": module_available("rclpy"),
         "unitree_api_request_available": module_available("unitree_api.msg"),
+        "unitree_hg_lowcmd_available": module_available("unitree_sdk2py.idl.unitree_hg.msg.dds_"),
+        "unitree_crc_available": module_available("unitree_sdk2py.utils.crc"),
         "motor_commands_enabled": is_truthy(
             source_env.get("G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS")
         ),
@@ -62,6 +64,10 @@ def readiness_errors(status: Mapping[str, object]) -> list[str]:
         errors.append("unitree_api.msg is not importable")
     if not status.get("unitree_sdk_available"):
         errors.append(f"{status.get('unitree_sdk_module')} is not importable")
+    if not status.get("unitree_hg_lowcmd_available"):
+        errors.append("unitree_sdk2py.idl.unitree_hg.msg.dds_ is not importable")
+    if not status.get("unitree_crc_available"):
+        errors.append("unitree_sdk2py.utils.crc is not importable")
     if not status.get("robot_network_selected"):
         errors.append("G1_BOBBY_UNITREE_NETWORK_INTERFACE is still loopback/local")
     return errors
