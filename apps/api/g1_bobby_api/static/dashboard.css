@@ -141,6 +141,10 @@ input {
   min-width: 260px;
 }
 
+.compact-field {
+  width: 120px;
+}
+
 button {
   min-width: 36px;
   min-height: 36px;
@@ -263,6 +267,36 @@ button.danger {
   background: #102432;
   border: 1px solid #1e3d52;
   color: #b8d6e0;
+}
+
+.chip.ok {
+  background: #183326;
+  border-color: #23573a;
+  color: #bfe9cb;
+}
+
+.chip.warn {
+  background: #3a2d16;
+  border-color: #8a6a22;
+  color: #ecd48e;
+}
+
+.chip.bad {
+  background: #3b1e24;
+  border-color: #704048;
+  color: #f0b5bb;
+}
+
+.stamp.ok {
+  color: var(--accent);
+}
+
+.stamp.warn {
+  color: var(--warn);
+}
+
+.stamp.bad {
+  color: var(--danger);
 }
 
 @media (max-width: 1100px) {

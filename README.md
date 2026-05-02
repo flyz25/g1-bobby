@@ -54,6 +54,15 @@ docker compose run --rm api pytest
 docker compose down
 ```
 
+Quick local targets:
+
+```bash
+make dev-up
+make dev-doctor
+make unitree-report
+make unitree-sim-trace
+```
+
 Optional local Python workflow, if `python3.12-venv` is installed:
 
 ```bash
@@ -189,6 +198,18 @@ active `rt/lowcmd` write probe:
 g1-bobby-unitree-diagnostic-report --network-interface eth0 --transport sdk_real --probe-lowcmd-write
 ```
 
+Run safe lowcmd acceptance experiments across multiple diagnostic templates:
+
+```bash
+g1-bobby-unitree-lowcmd-experiments --network-interface eth0 --count 5 --period-s 0 --template neutral_probe --template hold_zero_damped
+```
+
+Trace the current simulator/runtime command surface into one classified report:
+
+```bash
+g1-bobby-unitree-sim-trace --network-interface eth0 --transport sdk_real
+```
+
 The API also exposes the latest accepted dry-run translation at:
 
 ```text
@@ -226,6 +247,8 @@ Diagnostic report dan lowcmd template catalog juga tersedia di:
 ```text
 http://localhost:8010/unitree/diagnostic-report
 http://localhost:8010/unitree/lowcmd-templates
+http://localhost:8010/unitree/sim-trace
+http://localhost:8010/unitree/lowcmd-experiments
 ```
 
 Rejected-command audit juga tersedia di:

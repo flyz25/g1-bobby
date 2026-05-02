@@ -14,10 +14,16 @@ from g1_bobby_adapters.unitree_transport import UnitreeTransportConfigurationErr
 @dataclass(frozen=True)
 class HgLowCmdFramePlan:
     topic: str
+    template: str
     mode_pr: int
     mode_machine: int
     motor_count: int
     motor_mode: int
+    q: float
+    dq: float
+    tau: float
+    kp: float
+    kd: float
     crc: int
 
 
@@ -31,6 +37,43 @@ LOWCMD_TEMPLATE_SPECS: tuple[dict[str, object], ...] = (
             "mode_machine": 0,
             "motor_mode": 0,
             "motor_count": 35,
+            "q": 0.0,
+            "dq": 0.0,
+            "tau": 0.0,
+            "kp": 0.0,
+            "kd": 0.0,
+        },
+    },
+    {
+        "name": "hold_zero_mode1",
+        "description": "Zero-position hold frame with motor mode 1 and no gains. Diagnostic only.",
+        "defaults": {
+            "topic": "rt/lowcmd",
+            "mode_pr": 0,
+            "mode_machine": 0,
+            "motor_mode": 1,
+            "motor_count": 35,
+            "q": 0.0,
+            "dq": 0.0,
+            "tau": 0.0,
+            "kp": 0.0,
+            "kd": 0.0,
+        },
+    },
+    {
+        "name": "hold_zero_damped",
+        "description": "Zero-position hold frame with light gains for acceptance experiments only.",
+        "defaults": {
+            "topic": "rt/lowcmd",
+            "mode_pr": 0,
+            "mode_machine": 0,
+            "motor_mode": 1,
+            "motor_count": 35,
+            "q": 0.0,
+            "dq": 0.0,
+            "tau": 0.0,
+            "kp": 20.0,
+            "kd": 1.0,
         },
     },
 )
@@ -47,8 +90,19 @@ def list_lowcmd_templates() -> list[dict[str, object]]:
     ]
 
 
+def resolve_lowcmd_template(name: str) -> dict[str, object]:
+    for template in LOWCMD_TEMPLATE_SPECS:
+        if template["name"] == name:
+            return {
+                "name": str(template["name"]),
+                "description": str(template["description"]),
+                "defaults": dict(template["defaults"]),
+            }
+    raise UnitreeTransportConfigurationError(f"unknown lowcmd template: {name}")
+
+
 class HgLowCmdProbePublisher:
-    """Emit neutral HG lowcmd DDS frames for simulator/runtime diagnosis.
+    """Emit HG lowcmd DDS frames for simulator/runtime diagnosis.
 
     This does not try to map high-level operator commands onto joints. It only
     verifies that a caller can construct and publish a structurally valid
@@ -129,31 +183,48 @@ class HgLowCmdProbePublisher:
         self._publisher = None
         self._connected = False
 
-    def build_neutral_frame(
+    def build_frame(
         self,
         *,
-        mode_pr: int = 0,
-        mode_machine: int = 0,
-        motor_mode: int = 0,
+        template: str = "neutral_probe",
+        mode_pr: int | None = None,
+        mode_machine: int | None = None,
+        motor_mode: int | None = None,
+        q: float | None = None,
+        dq: float | None = None,
+        tau: float | None = None,
+        kp: float | None = None,
+        kd: float | None = None,
     ) -> tuple[Any, HgLowCmdFramePlan]:
         if self._lowcmd_class is None or self._motorcmd_class is None or self._crc is None:
             raise UnitreeTransportConfigurationError("HG lowcmd probe publisher is not connected")
+        template_defaults = resolve_lowcmd_template(template)["defaults"]
+        resolved_mode_pr = int(template_defaults["mode_pr"] if mode_pr is None else mode_pr)
+        resolved_mode_machine = int(
+            template_defaults["mode_machine"] if mode_machine is None else mode_machine
+        )
+        resolved_motor_mode = int(template_defaults["motor_mode"] if motor_mode is None else motor_mode)
+        resolved_q = float(template_defaults["q"] if q is None else q)
+        resolved_dq = float(template_defaults["dq"] if dq is None else dq)
+        resolved_tau = float(template_defaults["tau"] if tau is None else tau)
+        resolved_kp = float(template_defaults["kp"] if kp is None else kp)
+        resolved_kd = float(template_defaults["kd"] if kd is None else kd)
 
         motors = [
             self._motorcmd_class(
-                motor_mode,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
+                resolved_motor_mode,
+                resolved_q,
+                resolved_dq,
+                resolved_tau,
+                resolved_kp,
+                resolved_kd,
                 0,
             )
             for _ in range(35)
         ]
         frame = self._lowcmd_class(
-            int(mode_pr),
-            int(mode_machine),
+            resolved_mode_pr,
+            resolved_mode_machine,
             motors,
             [0, 0, 0, 0],
             0,
@@ -162,34 +233,58 @@ class HgLowCmdProbePublisher:
         frame.crc = crc
         return frame, HgLowCmdFramePlan(
             topic=self._topic,
-            mode_pr=int(mode_pr),
-            mode_machine=int(mode_machine),
+            template=template,
+            mode_pr=resolved_mode_pr,
+            mode_machine=resolved_mode_machine,
             motor_count=len(motors),
-            motor_mode=int(motor_mode),
+            motor_mode=resolved_motor_mode,
+            q=resolved_q,
+            dq=resolved_dq,
+            tau=resolved_tau,
+            kp=resolved_kp,
+            kd=resolved_kd,
             crc=crc,
         )
 
-    async def publish_neutral_frame(
+    async def publish_frame(
         self,
         *,
-        mode_pr: int = 0,
-        mode_machine: int = 0,
-        motor_mode: int = 0,
+        template: str = "neutral_probe",
+        mode_pr: int | None = None,
+        mode_machine: int | None = None,
+        motor_mode: int | None = None,
+        q: float | None = None,
+        dq: float | None = None,
+        tau: float | None = None,
+        kp: float | None = None,
+        kd: float | None = None,
     ) -> dict[str, Any]:
         if not self._connected or self._publisher is None:
             raise UnitreeTransportConfigurationError("HG lowcmd probe publisher is not connected")
-        frame, plan = self.build_neutral_frame(
+        frame, plan = self.build_frame(
+            template=template,
             mode_pr=mode_pr,
             mode_machine=mode_machine,
             motor_mode=motor_mode,
+            q=q,
+            dq=dq,
+            tau=tau,
+            kp=kp,
+            kd=kd,
         )
         write_result = self._publisher.Write(frame, self._write_timeout_s)
         return {
             "topic": plan.topic,
+            "template": plan.template,
             "mode_pr": plan.mode_pr,
             "mode_machine": plan.mode_machine,
             "motor_count": plan.motor_count,
             "motor_mode": plan.motor_mode,
+            "q": plan.q,
+            "dq": plan.dq,
+            "tau": plan.tau,
+            "kp": plan.kp,
+            "kd": plan.kd,
             "crc": plan.crc,
             "write_result": write_result,
         }
@@ -232,6 +327,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Per-motor mode value for all 35 motors.",
     )
+    parser.add_argument("--q", type=float, default=0.0, help="Per-motor target position.")
+    parser.add_argument("--dq", type=float, default=0.0, help="Per-motor target velocity.")
+    parser.add_argument("--tau", type=float, default=0.0, help="Per-motor feed-forward torque.")
+    parser.add_argument("--kp", type=float, default=0.0, help="Per-motor stiffness gain.")
+    parser.add_argument("--kd", type=float, default=0.0, help="Per-motor damping gain.")
     parser.add_argument(
         "--write-timeout-s",
         type=float,
@@ -261,15 +361,12 @@ async def _run_publish(args: argparse.Namespace) -> dict[str, Any]:
     )
     await publisher.connect()
     try:
-        template_defaults = next(
-            dict(item["defaults"])
-            for item in LOWCMD_TEMPLATE_SPECS
-            if item["name"] == args.template
-        )
+        template_defaults = resolve_lowcmd_template(args.template)["defaults"]
         frames = []
         write_success = True
         for index in range(args.count):
-            frame = await publisher.publish_neutral_frame(
+            frame = await publisher.publish_frame(
+                template=args.template,
                 mode_pr=args.mode_pr if args.mode_pr != 0 else int(template_defaults["mode_pr"]),
                 mode_machine=(
                     args.mode_machine
@@ -277,6 +374,11 @@ async def _run_publish(args: argparse.Namespace) -> dict[str, Any]:
                     else int(template_defaults["mode_machine"])
                 ),
                 motor_mode=args.motor_mode if args.motor_mode != 0 else int(template_defaults["motor_mode"]),
+                q=args.q if args.q != 0.0 else float(template_defaults["q"]),
+                dq=args.dq if args.dq != 0.0 else float(template_defaults["dq"]),
+                tau=args.tau if args.tau != 0.0 else float(template_defaults["tau"]),
+                kp=args.kp if args.kp != 0.0 else float(template_defaults["kp"]),
+                kd=args.kd if args.kd != 0.0 else float(template_defaults["kd"]),
             )
             frames.append(frame)
             if frame["write_result"] is False:

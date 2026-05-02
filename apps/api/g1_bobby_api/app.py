@@ -21,8 +21,11 @@ from g1_bobby_contracts import (
     UnitreeTransportCapability,
 )
 from g1_bobby_contracts.unitree import UnitreeDdsSnapshot
+from g1_bobby_adapters.unitree_transport import UnitreeTransportConfigurationError
 from g1_bobby_unitree_bridge.diagnostic_report import build_unitree_diagnostic_report
+from g1_bobby_unitree_bridge.lowcmd_experiments import _run_experiments as run_lowcmd_experiments
 from g1_bobby_unitree_bridge.publish_lowcmd import list_lowcmd_templates
+from g1_bobby_unitree_bridge.sim_trace import _run_trace as run_sim_trace
 
 from .config import Settings
 from .runtime import Runtime
@@ -178,6 +181,48 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "unitree_execution_result": await app.state.runtime.unitree_execution_result_status(),
         }
         return report
+
+    @app.get("/unitree/sim-trace")
+    async def unitree_sim_trace() -> dict[str, object]:
+        return await run_sim_trace(
+            type(
+                "Args",
+                (),
+                {
+                    "network_interface": app.state.settings.unitree_network_interface,
+                    "sdk_module": app.state.settings.unitree_sdk_module,
+                    "transport": str(app.state.settings.unitree_command_transport),
+                    "api_url": "http://127.0.0.1:8010",
+                    "skip_api": False,
+                },
+            )()
+        )
+
+    @app.get("/unitree/lowcmd-experiments")
+    async def unitree_lowcmd_experiments(
+        count: int = 3,
+    ) -> dict[str, object]:
+        try:
+            return await run_lowcmd_experiments(
+                type(
+                    "Args",
+                    (),
+                    {
+                        "network_interface": app.state.settings.unitree_network_interface,
+                        "sdk_module": app.state.settings.unitree_sdk_module,
+                        "topic": "rt/lowcmd",
+                        "count": count,
+                        "period_s": None,
+                        "template": None,
+                    },
+                )()
+            )
+        except (ValueError, UnitreeTransportConfigurationError) as exc:
+            return {
+                "status": "blocked",
+                "cases": [],
+                "detail": str(exc),
+            }
 
     @app.get("/operator/rejection")
     async def rejected_command() -> RejectedCommandRecord:

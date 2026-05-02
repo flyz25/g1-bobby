@@ -54,7 +54,7 @@ class _FakeChannelPublisher:
 
 
 @pytest.mark.asyncio
-async def test_lowcmd_probe_publisher_builds_neutral_frame(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_lowcmd_probe_publisher_builds_template_frame(monkeypatch: pytest.MonkeyPatch) -> None:
     captured = {}
 
     def fake_initialize(domain_id: int, interface: str) -> None:
@@ -81,7 +81,14 @@ async def test_lowcmd_probe_publisher_builds_neutral_frame(monkeypatch: pytest.M
     probe = HgLowCmdProbePublisher(network_interface="lo", sdk_module="unitree_sdk_for_test")
     await probe.connect()
     try:
-        result = await probe.publish_neutral_frame(mode_pr=2, mode_machine=7, motor_mode=9)
+        result = await probe.publish_frame(
+            template="hold_zero_damped",
+            mode_pr=2,
+            mode_machine=7,
+            motor_mode=9,
+            kp=11.0,
+            kd=0.5,
+        )
     finally:
         await probe.disconnect()
 
@@ -89,10 +96,13 @@ async def test_lowcmd_probe_publisher_builds_neutral_frame(monkeypatch: pytest.M
     assert publisher.initialized is True
     assert publisher.closed is True
     assert result["topic"] == "rt/lowcmd"
+    assert result["template"] == "hold_zero_damped"
     assert result["mode_pr"] == 2
     assert result["mode_machine"] == 7
     assert result["motor_count"] == 35
     assert result["motor_mode"] == 9
+    assert result["kp"] == 11.0
+    assert result["kd"] == 0.5
     assert result["crc"] == 123456
     assert result["write_result"] is True
     message, timeout = publisher.writes[0]
@@ -100,6 +110,8 @@ async def test_lowcmd_probe_publisher_builds_neutral_frame(monkeypatch: pytest.M
     assert message.crc == 123456
     assert len(message.motor_cmd) == 35
     assert all(motor.mode == 9 for motor in message.motor_cmd)
+    assert all(motor.kp == 11.0 for motor in message.motor_cmd)
+    assert all(motor.kd == 0.5 for motor in message.motor_cmd)
 
 
 @pytest.mark.asyncio
@@ -213,16 +225,10 @@ def test_publish_lowcmd_cli_can_require_successful_write(capsys, monkeypatch: py
 def test_list_lowcmd_templates_exposes_neutral_probe() -> None:
     templates = list_lowcmd_templates()
 
-    assert templates == [
-        {
-            "name": "neutral_probe",
-            "description": "Zeroed HG lowcmd frame for DDS write-acceptance diagnostics only.",
-            "defaults": {
-                "topic": "rt/lowcmd",
-                "mode_pr": 0,
-                "mode_machine": 0,
-                "motor_mode": 0,
-                "motor_count": 35,
-            },
-        }
+    assert [template["name"] for template in templates] == [
+        "neutral_probe",
+        "hold_zero_mode1",
+        "hold_zero_damped",
     ]
+    assert templates[2]["defaults"]["kp"] == 20.0
+    assert templates[2]["defaults"]["kd"] == 1.0

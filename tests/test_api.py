@@ -55,6 +55,8 @@ def test_health_and_state_endpoints(tmp_path: Path) -> None:
         assert "connectSocket" in asset.text
         assert "executionPlanHistory" in asset.text
         assert "run-lowcmd-probe" in asset.text
+        assert "export-audit-bundle" in asset.text
+        assert "toggle-auto-refresh" in asset.text
 
         health = client.get("/health")
         assert health.status_code == 200
@@ -90,6 +92,10 @@ def test_health_and_state_endpoints(tmp_path: Path) -> None:
         assert diagnostic_body["lowcmd_templates"][0]["name"] == "neutral_probe"
         assert diagnostic_body["runtime_summary"]["adapter"] == "mock"
         assert "transport_capability" not in diagnostic_body
+
+        sim_trace = client.get("/unitree/sim-trace")
+        assert sim_trace.status_code == 200
+        assert "classification" in sim_trace.json()
 
 
 def test_estop_and_reset_estop(tmp_path: Path) -> None:
@@ -227,6 +233,32 @@ def test_unitree_diagnostic_report_can_include_lowcmd_probe(tmp_path: Path, monk
         payload = response.json()
         assert payload["status"] == "blocked"
         assert payload["lowcmd_write_probe"]["status"] == "rejected"
+
+
+def test_unitree_sim_trace_endpoint_can_be_stubbed(tmp_path: Path, monkeypatch) -> None:
+    async def fake_trace(args):
+        assert args.transport in {"disabled", "sdk_real", "dry_run"}
+        return {"status": "blocked", "classification": "state_only_runtime"}
+
+    monkeypatch.setattr("g1_bobby_api.app.run_sim_trace", fake_trace)
+
+    with TestClient(create_app(build_settings(tmp_path))) as client:
+        response = client.get("/unitree/sim-trace")
+        assert response.status_code == 200
+        assert response.json()["classification"] == "state_only_runtime"
+
+
+def test_unitree_lowcmd_experiments_endpoint_can_be_stubbed(tmp_path: Path, monkeypatch) -> None:
+    async def fake_experiments(args):
+        assert args.count == 3
+        return {"status": "blocked", "cases": [{"template": "neutral_probe", "accepted": False}]}
+
+    monkeypatch.setattr("g1_bobby_api.app.run_lowcmd_experiments", fake_experiments)
+
+    with TestClient(create_app(build_settings(tmp_path))) as client:
+        response = client.get("/unitree/lowcmd-experiments")
+        assert response.status_code == 200
+        assert response.json()["cases"][0]["template"] == "neutral_probe"
 
 
 def test_websocket_rejects_invalid_token(tmp_path: Path) -> None:

@@ -5,10 +5,14 @@
     auditSocket: null,
     lastState: null,
     lastRuntime: null,
+    lastDiagnostic: null,
+    lastHistoryBundle: null,
+    autoRefreshTimer: null,
   };
 
   const els = {
     tokenInput: document.getElementById("token-input"),
+    autoRefreshS: document.getElementById("auto-refresh-s"),
     connectionSummary: document.getElementById("connection-summary"),
     runtimeUpdated: document.getElementById("runtime-updated"),
     stateUpdated: document.getElementById("state-updated"),
@@ -64,6 +68,18 @@
       }
       return response;
     });
+  }
+
+  function setStampState(target, value) {
+    target.textContent = value;
+    target.classList.remove("ok", "warn", "bad");
+    if (["ready", "accepted", "live", "synced", "open"].includes(value)) {
+      target.classList.add("ok");
+    } else if (["blocked", "rejected", "stale", "connecting"].includes(value)) {
+      target.classList.add("warn");
+    } else if (["error", "not_ready", "closed"].includes(value)) {
+      target.classList.add("bad");
+    }
   }
 
   function setMetrics(target, pairs) {
@@ -141,17 +157,48 @@
     target.replaceChildren();
     if (!items.length) {
       const chip = document.createElement("div");
-      chip.className = "chip";
+      chip.className = "chip ok";
       chip.textContent = "clear";
       target.append(chip);
       return;
     }
     items.forEach((item) => {
       const chip = document.createElement("div");
-      chip.className = "chip";
-      chip.textContent = item;
+      chip.className = "chip warn";
+      const text = String(item);
+      if (text.includes("error") || text.includes("not importable") || text.includes("invalid")) {
+        chip.className = "chip bad";
+      }
+      chip.textContent = text;
       target.append(chip);
     });
+  }
+
+  function downloadJson(filename, payload) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const href = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(href);
+  }
+
+  async function loadHistoryBundle() {
+    const [commandPlans, executionPlans, executionResults, rejections] = await Promise.all([
+      api("/unitree/command-plans").then((r) => r.json()),
+      api("/unitree/execution-plans").then((r) => r.json()),
+      api("/unitree/execution-results").then((r) => r.json()),
+      api("/operator/rejections").then((r) => r.json()),
+    ]);
+    state.lastHistoryBundle = {
+      exported_at: new Date().toISOString(),
+      command_plans: commandPlans,
+      execution_plans: executionPlans,
+      execution_results: executionResults,
+      rejected_commands: rejections,
+    };
+    return state.lastHistoryBundle;
   }
 
   async function refreshRuntime() {
@@ -178,24 +225,10 @@
         ["Binding", String(capability.binding_implemented)],
         ["Ready", String(capability.ready)],
       ]);
-      els.transportBlockers.replaceChildren();
-      const blockers = capability.blockers || [];
-      if (!blockers.length) {
-        const chip = document.createElement("div");
-        chip.className = "chip";
-        chip.textContent = "ready";
-        els.transportBlockers.append(chip);
-      } else {
-        blockers.forEach((item) => {
-          const chip = document.createElement("div");
-          chip.className = "chip";
-          chip.textContent = item;
-          els.transportBlockers.append(chip);
-        });
-      }
+      setChips(els.transportBlockers, capability.blockers || []);
     } else {
       setMetrics(els.transportMetrics, [["Transport", "mock"], ["Ready", "n/a"]]);
-      els.transportBlockers.replaceChildren();
+      setChips(els.transportBlockers, []);
     }
   }
 
@@ -220,30 +253,24 @@
   async function refreshDiagnostics(probeLowcmdWrite) {
     const query = probeLowcmdWrite ? "?probe_lowcmd_write=true" : "";
     const payload = await api(`/unitree/diagnostic-report${query}`).then((r) => r.json());
+    state.lastDiagnostic = payload;
     els.diagnosticUpdated.textContent = nowIso();
-    els.lowcmdProbeStatus.textContent = payload.lowcmd_write_probe
-      ? payload.lowcmd_write_probe.status
-      : "idle";
+    setStampState(
+      els.lowcmdProbeStatus,
+      payload.lowcmd_write_probe ? String(payload.lowcmd_write_probe.status) : "idle"
+    );
     setMetrics(els.diagnosticMetrics, [
       ["Status", payload.status],
       ["Errors", String((payload.errors || []).length)],
       ["Templates", String((payload.lowcmd_templates || []).length)],
-      [
-        "Lowcmd probe",
-        payload.lowcmd_write_probe ? String(payload.lowcmd_write_probe.status) : "not_run",
-      ],
-      [
-        "State updates",
-        String(payload.runtime_summary?.unitree_state?.updates ?? 0),
-      ],
-      [
-        "Exec results",
-        String(payload.runtime_summary?.unitree_execution_result?.results ?? 0),
-      ],
+      ["Lowcmd probe", payload.lowcmd_write_probe ? String(payload.lowcmd_write_probe.status) : "not_run"],
+      ["State updates", String(payload.runtime_summary?.unitree_state?.updates ?? 0)],
+      ["Exec results", String(payload.runtime_summary?.unitree_execution_result?.results ?? 0)],
     ]);
     setChips(
       els.diagnosticSummary,
       [
+        `diagnostic:${payload.status}`,
         ...(payload.errors || []),
         ...((payload.transport_capability && payload.transport_capability.blockers) || []),
       ]
@@ -261,12 +288,12 @@
   }
 
   async function refreshHistory() {
-    const [commandPlans, executionPlans, executionResults, rejections] = await Promise.all([
-      api("/unitree/command-plans").then((r) => r.json()),
-      api("/unitree/execution-plans").then((r) => r.json()),
-      api("/unitree/execution-results").then((r) => r.json()),
-      api("/operator/rejections").then((r) => r.json()),
-    ]);
+    const {
+      command_plans: commandPlans,
+      execution_plans: executionPlans,
+      execution_results: executionResults,
+      rejected_commands: rejections,
+    } = await loadHistoryBundle();
 
     els.commandPlanCount.textContent = String(commandPlans.length);
     els.executionPlanCount.textContent = String(executionPlans.length);
@@ -322,11 +349,23 @@
   async function refreshAll() {
     try {
       await Promise.all([refreshRuntime(), refreshState(), refreshHistory(), refreshDiagnostics(false)]);
-      els.connectionSummary.textContent = "synced";
+      setStampState(els.connectionSummary, "synced");
     } catch (error) {
-      els.connectionSummary.textContent = `sync error`;
+      setStampState(els.connectionSummary, "error");
       addLog(els.operatorEvents, "refresh-error", { message: String(error) });
     }
+  }
+
+  function applyAutoRefresh() {
+    if (state.autoRefreshTimer) {
+      clearInterval(state.autoRefreshTimer);
+      state.autoRefreshTimer = null;
+    }
+    const intervalS = Number(els.autoRefreshS.value);
+    if (!Number.isFinite(intervalS) || intervalS <= 0) {
+      return;
+    }
+    state.autoRefreshTimer = setInterval(refreshAll, intervalS * 1000);
   }
 
   function sendCommand(command) {
@@ -380,16 +419,16 @@
     const path = isAudit ? "/ws/operator/audit" : "/ws/operator";
     const socket = new WebSocket(`${wsBase(path)}?token=${encodeURIComponent(els.tokenInput.value)}`);
 
-    target.textContent = "connecting";
+    setStampState(target, "connecting");
     socket.onopen = function () {
-      target.textContent = "open";
-      els.connectionSummary.textContent = "live";
+      setStampState(target, "open");
+      setStampState(els.connectionSummary, "live");
     };
     socket.onclose = function () {
-      target.textContent = "closed";
+      setStampState(target, "closed");
     };
     socket.onerror = function () {
-      target.textContent = "error";
+      setStampState(target, "error");
     };
     socket.onmessage = function (event) {
       const payload = JSON.parse(event.data);
@@ -417,20 +456,40 @@
     if (kind === "audit" && state.auditSocket) {
       state.auditSocket.close();
       state.auditSocket = null;
-      els.auditSocketState.textContent = "closed";
+      setStampState(els.auditSocketState, "closed");
     }
     if (kind === "operator" && state.operatorSocket) {
       state.operatorSocket.close();
       state.operatorSocket = null;
-      els.operatorSocketState.textContent = "closed";
+      setStampState(els.operatorSocketState, "closed");
     }
   }
 
   document.getElementById("refresh-all").addEventListener("click", refreshAll);
+  document.getElementById("toggle-auto-refresh").addEventListener("click", applyAutoRefresh);
   document.getElementById("run-lowcmd-probe").addEventListener("click", function () {
     refreshDiagnostics(true).catch((error) => {
       addLog(els.operatorEvents, "diagnostic-error", { message: String(error) });
     });
+  });
+  document.getElementById("export-diagnostic").addEventListener("click", function () {
+    if (state.lastDiagnostic) {
+      downloadJson("g1-bobby-diagnostic-report.json", state.lastDiagnostic);
+    }
+  });
+  document.getElementById("run-sim-trace").addEventListener("click", async function () {
+    try {
+      const payload = await api("/unitree/sim-trace").then((r) => r.json());
+      state.lastDiagnostic = payload;
+      setJson(els.diagnosticJson, payload);
+      setStampState(els.lowcmdProbeStatus, payload.classification || payload.status);
+    } catch (error) {
+      addLog(els.operatorEvents, "sim-trace-error", { message: String(error) });
+    }
+  });
+  document.getElementById("export-audit-bundle").addEventListener("click", async function () {
+    const payload = await loadHistoryBundle();
+    downloadJson("g1-bobby-audit-bundle.json", payload);
   });
   document.getElementById("connect-operator").addEventListener("click", function () {
     connectSocket("operator");
@@ -473,5 +532,6 @@
     postEstop("/reset-estop");
   });
 
+  applyAutoRefresh();
   refreshAll();
 })();

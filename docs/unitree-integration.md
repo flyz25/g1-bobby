@@ -147,6 +147,13 @@ docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
 
 docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
   g1-bobby-unitree-diagnostic-report --network-interface eth0 --transport sdk_real --probe-lowcmd-write
+
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  g1-bobby-unitree-lowcmd-experiments --network-interface eth0 --count 5 --period-s 0 \
+  --template neutral_probe --template hold_zero_damped
+
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  g1-bobby-unitree-sim-trace --network-interface eth0 --transport sdk_real
 ```
 
 Dry-run command translation, without DDS publish:
@@ -219,10 +226,13 @@ The API now also exposes:
 ```text
 GET /unitree/diagnostic-report
 GET /unitree/lowcmd-templates
+GET /unitree/sim-trace
+GET /unitree/lowcmd-experiments
 ```
 
 The operator dashboard consumes the same report so transport blockers, current
-readiness, and lowcmd probe results are visible without leaving `/dashboard`.
+readiness, lowcmd probe results, and exportable diagnostic/audit bundles are
+visible without leaving `/dashboard`.
 
 At runtime, the API stores the latest accepted dry-run plan and exposes it via:
 

@@ -18,11 +18,16 @@
             <span>Token</span>
             <input id="token-input" type="password" value="dev-operator-token" />
           </label>
+          <label class="field compact-field">
+            <span>Auto refresh s</span>
+            <input id="auto-refresh-s" type="number" step="1" min="0" value="5" />
+          </label>
           <div class="inline-actions">
             <button id="connect-operator" class="primary" title="Connect operator socket">◎</button>
             <button id="disconnect-operator" title="Disconnect operator socket">◌</button>
             <button id="connect-audit" title="Connect audit socket">◉</button>
             <button id="disconnect-audit" title="Disconnect audit socket">○</button>
+            <button id="toggle-auto-refresh" title="Toggle auto refresh">⏱</button>
             <button id="refresh-all" title="Refresh data">↻</button>
           </div>
         </div>
@@ -61,6 +66,7 @@
               <div class="inline-actions">
                 <span id="diagnostic-updated" class="stamp">-</span>
                 <button id="run-lowcmd-probe" title="Run active lowcmd write probe">◈</button>
+                <button id="export-diagnostic" title="Export diagnostic report">⇩</button>
               </div>
             </div>
             <dl class="metric-grid" id="diagnostic-metrics"></dl>
@@ -76,7 +82,10 @@
           <div class="panel">
             <div class="panel-header">
               <h2>Diagnostic JSON</h2>
-              <span id="lowcmd-probe-status" class="stamp">-</span>
+              <div class="inline-actions">
+                <span id="lowcmd-probe-status" class="stamp">-</span>
+                <button id="run-sim-trace" title="Run simulator trace">⌁</button>
+              </div>
             </div>
             <pre id="diagnostic-json" class="json-view"></pre>
           </div>
@@ -192,7 +201,10 @@
           <div class="panel">
             <div class="panel-header">
               <h2>Rejected Commands</h2>
-              <span class="stamp" id="rejection-count">0</span>
+              <div class="inline-actions">
+                <span class="stamp" id="rejection-count">0</span>
+                <button id="export-audit-bundle" title="Export audit bundle">⇩</button>
+              </div>
             </div>
             <div id="rejection-history" class="history-list"></div>
           </div>

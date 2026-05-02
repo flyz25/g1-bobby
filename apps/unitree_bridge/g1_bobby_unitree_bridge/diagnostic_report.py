@@ -48,7 +48,7 @@ async def build_unitree_diagnostic_report(
             )
             await publisher.connect()
             try:
-                result = await publisher.publish_neutral_frame()
+                result = await publisher.publish_frame()
             finally:
                 await publisher.disconnect()
         except Exception as exc:
