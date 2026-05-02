@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from enum import StrEnum
-
 from pydantic import BaseModel, ConfigDict, Field
+
+from ._compat import StrEnum
 
 
 class ControlMode(StrEnum):
@@ -22,4 +22,3 @@ class RobotState(BaseModel):
     last_state_at: float | None = Field(default=None, gt=0)
     last_heartbeat_at: float | None = Field(default=None, gt=0)
     pose_label: str = "mock-origin"
-

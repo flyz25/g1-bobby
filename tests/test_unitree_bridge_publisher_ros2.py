@@ -33,10 +33,10 @@ def test_resolve_ros2_binding_maps_set_mode_to_sport_request() -> None:
     assert binding is not None
     assert binding.topic == "/api/sport/request"
     assert binding.msg_type == "unitree_api/msg/Request"
-    assert binding.binding_mode == "sport_request"
+    assert binding.binding_mode == "g1_loco_request"
 
 
-def test_resolve_ros2_binding_maps_velocity_to_lowcmd() -> None:
+def test_resolve_ros2_binding_maps_velocity_to_g1_loco_request() -> None:
     binding = resolve_ros2_binding(
         MoveVelocityCommand(
             type=CommandType.MOVE_VELOCITY,
@@ -52,12 +52,12 @@ def test_resolve_ros2_binding_maps_velocity_to_lowcmd() -> None:
     )
 
     assert binding is not None
-    assert binding.topic == "/lowcmd"
-    assert binding.msg_type == "LowCmd"
-    assert binding.binding_mode == "low_level_motor"
+    assert binding.topic == "/api/sport/request"
+    assert binding.msg_type == "unitree_api/msg/Request"
+    assert binding.binding_mode == "g1_loco_request"
 
 
-def test_resolve_ros2_binding_maps_stop_to_lowcmd() -> None:
+def test_resolve_ros2_binding_maps_stop_to_g1_loco_request() -> None:
     binding = resolve_ros2_binding(
         StopCommand(
             type=CommandType.STOP,
@@ -68,8 +68,8 @@ def test_resolve_ros2_binding_maps_stop_to_lowcmd() -> None:
     )
 
     assert binding is not None
-    assert binding.topic == "/lowcmd"
-    assert binding.msg_type == "LowCmd"
+    assert binding.topic == "/api/sport/request"
+    assert binding.msg_type == "unitree_api/msg/Request"
 
 
 def test_resolve_ros2_binding_returns_none_for_heartbeat() -> None:
@@ -97,7 +97,7 @@ def test_build_ros2_publish_plan_maps_set_mode_payload() -> None:
 
     assert plan is not None
     assert plan.topic == "/api/sport/request"
-    assert plan.payload == {"api_id": "switch_mode", "parameter": {"mode": "manual"}}
+    assert plan.payload == {"api_id": 7101, "parameter": {"data": 500}}
 
 
 def test_build_ros2_publish_plan_maps_velocity_payload() -> None:
@@ -116,11 +116,10 @@ def test_build_ros2_publish_plan_maps_velocity_payload() -> None:
     )
 
     assert plan is not None
-    assert plan.topic == "/lowcmd"
+    assert plan.topic == "/api/sport/request"
     assert plan.payload == {
-        "mode": "velocity",
-        "velocity": {"linear_x": 0.1, "linear_y": 0.0, "angular_z": 0.2},
-        "duration_ms": 100,
+        "api_id": 7105,
+        "parameter": {"velocity": [0.1, 0.0, 0.2], "duration": 0.1},
     }
 
 
@@ -138,9 +137,7 @@ def test_build_ros2_publish_plan_returns_none_for_heartbeat() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ros2_real_publisher_rejects_move_velocity_until_lowcmd_path_is_wired(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_ros2_real_publisher_publishes_move_velocity(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_node = _FakeNode()
     fake_rclpy = SimpleNamespace(
         _ok=False,
@@ -155,23 +152,23 @@ async def test_ros2_real_publisher_rejects_move_velocity_until_lowcmd_path_is_wi
 
     await publisher.connect()
     try:
-        with pytest.raises(
-            UnitreeTransportConfigurationError,
-            match=r"supports only sport request control: move_velocity -> /lowcmd \(LowCmd\).*duration_ms': 100",
-        ):
-            await publisher.publish(
-                MoveVelocityCommand(
-                    type=CommandType.MOVE_VELOCITY,
-                    seq=3,
-                    timestamp=123.0,
-                    payload=MoveVelocityPayload(
-                        linear_x=0.1,
-                        linear_y=0.0,
-                        angular_z=0.0,
-                        duration_ms=100,
-                    ),
-                )
+        record = await publisher.publish(
+            MoveVelocityCommand(
+                type=CommandType.MOVE_VELOCITY,
+                seq=3,
+                timestamp=123.0,
+                payload=MoveVelocityPayload(
+                    linear_x=0.1,
+                    linear_y=0.0,
+                    angular_z=0.0,
+                    duration_ms=100,
+                ),
             )
+        )
+        assert record.plan.transport == "ros2_real"
+        message = fake_node.publisher.messages[0]
+        assert message.header.identity.api_id == 7105
+        assert message.parameter == '{"velocity": [0.1, 0.0, 0.0], "duration": 0.1}'
     finally:
         await publisher.disconnect()
 
@@ -199,7 +196,7 @@ async def test_ros2_real_publisher_rejects_unbound_heartbeat(
 
 class _FakeRequest:
     def __init__(self) -> None:
-        self.api_id = None
+        self.header = SimpleNamespace(identity=SimpleNamespace(api_id=None))
         self.parameter = None
 
 
@@ -255,8 +252,8 @@ async def test_ros2_real_publisher_connects_and_publishes_set_mode(monkeypatch: 
         assert fake_node.qos_depth == 10
         assert len(fake_node.publisher.messages) == 1
         message = fake_node.publisher.messages[0]
-        assert message.api_id == "switch_mode"
-        assert message.parameter == {"mode": "manual"}
+        assert message.header.identity.api_id == 7101
+        assert message.parameter == '{"data": 500}'
         execution_plan = publisher.consume_last_execution_plan()
         assert execution_plan is not None
         assert execution_plan.transport == "ros2_real"
@@ -284,3 +281,18 @@ async def test_ros2_real_publisher_requires_request_module(monkeypatch: pytest.M
 
     with pytest.raises(UnitreeTransportConfigurationError, match="unitree_api.msg"):
         await publisher.connect()
+
+
+def test_build_ros2_publish_plan_rejects_unconfirmed_assist_mode() -> None:
+    with pytest.raises(
+        UnitreeTransportConfigurationError,
+        match="no confirmed G1 loco FSM mapping for set_mode=assist",
+    ):
+        build_ros2_publish_plan(
+            SetModeCommand(
+                type=CommandType.SET_MODE,
+                seq=1,
+                timestamp=123.0,
+                payload=SetModePayload(mode="assist"),
+            )
+        )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass
 from importlib import import_module
 from typing import Any
@@ -42,16 +43,16 @@ def resolve_ros2_binding(command: CommandEnvelope) -> Ros2BindingIntent | None:
             command_type=str(command.type),
             topic="/api/sport/request",
             msg_type="unitree_api/msg/Request",
-            binding_mode="sport_request",
-            note="Requires SportClient-style request construction as shown in unitree_ros2 sport_mode_ctrl.cpp",
+            binding_mode="g1_loco_request",
+            note="G1 unitree_ros2 example g1_loco_client.hpp maps FSM changes to /api/sport/request with Request.header.identity.api_id=7101",
         )
     if command.type in {CommandType.MOVE_VELOCITY, CommandType.STOP}:
         return Ros2BindingIntent(
             command_type=str(command.type),
-            topic="/lowcmd",
-            msg_type="LowCmd",
-            binding_mode="low_level_motor",
-            note="Official unitree_ros2 README maps motor control to /lowcmd; exact package differs by robot family and G1 example path is g1/lowlevel/g1_low_level_example",
+            topic="/api/sport/request",
+            msg_type="unitree_api/msg/Request",
+            binding_mode="g1_loco_request",
+            note="G1 unitree_ros2 example g1_loco_client.hpp maps velocity changes to /api/sport/request with Request.header.identity.api_id=7105",
         )
     return None
 
@@ -62,14 +63,24 @@ def build_ros2_publish_plan(command: CommandEnvelope) -> Ros2PublishPlan | None:
         return None
 
     if command.type == CommandType.SET_MODE:
+        fsm_id_by_mode = {
+            "idle": 1,
+            "manual": 500,
+        }
+        fsm_id = fsm_id_by_mode.get(command.payload.mode)
+        if fsm_id is None:
+            raise UnitreeTransportConfigurationError(
+                "ROS2 real publisher has no confirmed G1 loco FSM mapping for "
+                f"set_mode={command.payload.mode}"
+            )
         return Ros2PublishPlan(
             command_type=str(command.type),
             topic=binding.topic,
             msg_type=binding.msg_type,
             binding_mode=binding.binding_mode,
             payload={
-                "api_id": "switch_mode",
-                "parameter": {"mode": command.payload.mode},
+                "api_id": 7101,
+                "parameter": {"data": fsm_id},
             },
             note=binding.note,
         )
@@ -81,13 +92,15 @@ def build_ros2_publish_plan(command: CommandEnvelope) -> Ros2PublishPlan | None:
             msg_type=binding.msg_type,
             binding_mode=binding.binding_mode,
             payload={
-                "mode": "velocity",
-                "velocity": {
-                    "linear_x": command.payload.linear_x,
-                    "linear_y": command.payload.linear_y,
-                    "angular_z": command.payload.angular_z,
+                "api_id": 7105,
+                "parameter": {
+                    "velocity": [
+                        command.payload.linear_x,
+                        command.payload.linear_y,
+                        command.payload.angular_z,
+                    ],
+                    "duration": command.payload.duration_ms / 1000.0,
                 },
-                "duration_ms": command.payload.duration_ms,
             },
             note=binding.note,
         )
@@ -99,13 +112,11 @@ def build_ros2_publish_plan(command: CommandEnvelope) -> Ros2PublishPlan | None:
             msg_type=binding.msg_type,
             binding_mode=binding.binding_mode,
             payload={
-                "mode": "velocity",
-                "velocity": {
-                    "linear_x": 0.0,
-                    "linear_y": 0.0,
-                    "angular_z": 0.0,
+                "api_id": 7105,
+                "parameter": {
+                    "velocity": [0.0, 0.0, 0.0],
+                    "duration": 1.0,
                 },
-                "reason": command.payload.reason,
             },
             note=binding.note,
         )
@@ -114,7 +125,7 @@ def build_ros2_publish_plan(command: CommandEnvelope) -> Ros2PublishPlan | None:
 
 
 class Ros2RealUnitreeCommandPublisher:
-    """Partial live ROS2 publisher for confirmed sport-request control only."""
+    """Live ROS2 publisher for confirmed G1 sport request control."""
 
     def __init__(
         self,
@@ -196,15 +207,20 @@ class Ros2RealUnitreeCommandPublisher:
             )
         if not self._connected or self._sport_request_publisher is None or self._request_class is None:
             raise UnitreeTransportConfigurationError("ROS2 real publisher is not connected")
-        if command.type != CommandType.SET_MODE:
+        if command.type not in {CommandType.SET_MODE, CommandType.MOVE_VELOCITY, CommandType.STOP}:
             raise UnitreeTransportConfigurationError(
-                "ROS2 real publisher currently supports only sport request control: "
+                "ROS2 real publisher currently supports only confirmed G1 sport request control: "
                 f"{plan.command_type} -> {plan.topic} ({plan.msg_type}) payload={asdict(plan)['payload']}"
             )
 
         request = self._request_class()
-        setattr(request, "api_id", plan.payload["api_id"])
-        setattr(request, "parameter", plan.payload["parameter"])
+        try:
+            request.header.identity.api_id = int(plan.payload["api_id"])
+        except AttributeError as exc:
+            raise UnitreeTransportConfigurationError(
+                "ROS2 Request message does not expose header.identity.api_id"
+            ) from exc
+        setattr(request, "parameter", json.dumps(plan.payload["parameter"]))
         self._sport_request_publisher.publish(request)
 
         self._last_execution_plan = UnitreeExecutionPlan(
@@ -221,7 +237,7 @@ class Ros2RealUnitreeCommandPublisher:
             command_type=plan.command_type,
             status="published",
             target=plan.topic,
-            detail="published sport request message over ROS2",
+            detail="published G1 loco request over ROS2",
         )
         record = build_unitree_command_plan_record(
             command,

@@ -17,8 +17,9 @@ def test_publish_plan_cli_renders_ros2_real_plan(capsys) -> None:
     assert exit_code == 0
     payload = json.loads(captured.out)
     assert payload["transport"] == "ros2_real"
-    assert payload["plans"][0]["plan"]["topic"] == "/lowcmd"
-    assert payload["plans"][0]["plan"]["payload"]["duration_ms"] == 100
+    assert payload["plans"][0]["plan"]["topic"] == "/api/sport/request"
+    assert payload["plans"][0]["plan"]["payload"]["api_id"] == 7105
+    assert payload["plans"][0]["plan"]["payload"]["parameter"]["duration"] == 0.1
 
 
 def test_publish_plan_cli_renders_sdk_real_plan(capsys) -> None:

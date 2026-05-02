@@ -142,16 +142,16 @@ def test_format_event_summarizes_ack_and_reject() -> None:
         '"action":"motion.velocity","unitree_target":"base_velocity",'
         '"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}},'
         '"unitree_execution_plan":{"event_id":12,"recorded_at":124.0,"source":"live","stale":false,'
-        '"execution_plan":{"transport":"ros2_plan_stub","command_type":"move_velocity","binding_mode":"low_level_motor",'
-        '"surface":"LowCmd","target":"/lowcmd","payload":{"duration_ms":100},"note":"n"}},'
+        '"execution_plan":{"transport":"ros2_plan_stub","command_type":"move_velocity","binding_mode":"g1_loco_request",'
+        '"surface":"unitree_api/msg/Request","target":"/api/sport/request","payload":{"api_id":7105},"note":"n"}},'
         '"unitree_execution_result":{"event_id":13,"recorded_at":125.0,"source":"live","stale":false,'
         '"execution_result":{"transport":"ros2_plan_stub","command_type":"move_velocity","status":"stub_emitted",'
-        '"target":"/lowcmd","detail":"d"}}}'
+        '"target":"/api/sport/request","detail":"d"}}}'
     ) == (
         "ack seq=7 command=move_velocity message=accepted "
         "[id=11 action=motion.velocity target=base_velocity source=restored stale=true]"
-        " [exec_id=12 transport=ros2_plan_stub exec_target=/lowcmd]"
-        " [result_id=13 status=stub_emitted transport=ros2_plan_stub target=/lowcmd detail=d]"
+        " [exec_id=12 transport=ros2_plan_stub exec_target=/api/sport/request]"
+        " [result_id=13 status=stub_emitted transport=ros2_plan_stub target=/api/sport/request detail=d]"
     )
     assert format_event(
         '{"type":"reject","seq":8,"code":"execution_failed","reason":"transport disabled",'

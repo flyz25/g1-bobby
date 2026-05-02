@@ -13,7 +13,10 @@ def is_truthy(value: str | None) -> bool:
 def module_available(module_name: str) -> bool:
     if module_name in sys.modules:
         return True
-    return find_spec(module_name) is not None
+    try:
+        return find_spec(module_name) is not None
+    except ModuleNotFoundError:
+        return False
 
 
 def build_probe_status(
@@ -39,6 +42,7 @@ def build_probe_status(
         "unitree_sdk_module": resolved_sdk_module,
         "unitree_sdk_available": module_available(resolved_sdk_module),
         "rclpy_available": module_available("rclpy"),
+        "unitree_api_request_available": module_available("unitree_api.msg"),
         "motor_commands_enabled": is_truthy(
             source_env.get("G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS")
         ),
@@ -54,6 +58,8 @@ def readiness_errors(status: Mapping[str, object]) -> list[str]:
         errors.append("RMW_IMPLEMENTATION is not rmw_cyclonedds_cpp")
     if not status.get("rclpy_available"):
         errors.append("rclpy is not importable")
+    if not status.get("unitree_api_request_available"):
+        errors.append("unitree_api.msg is not importable")
     if not status.get("unitree_sdk_available"):
         errors.append(f"{status.get('unitree_sdk_module')} is not importable")
     if not status.get("robot_network_selected"):

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from enum import StrEnum
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from g1_bobby_adapters import UnitreeAdapterConfig
+from g1_bobby_contracts._compat import StrEnum
 from g1_bobby_safety import SafetyLimits
 
 from .command_gate import CommandGateLimits

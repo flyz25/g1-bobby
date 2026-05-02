@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ._compat import StrEnum
 from .state import RobotState
 from .unitree_command import (
     UnitreeCommandPlanRecord,

@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LD_LIBRARY_PATH=/opt/cyclonedds/install/lib \
     MUJOCO_HOME=/opt/mujoco/mujoco-3.3.6 \
     UNITREE_MUJOCO_HOME=/opt/unitree/unitree_mujoco \
-    PYTHONPATH=/workspace/g1-bobby/apps/unitree_bridge:/workspace/g1-bobby/packages/contracts
+    PYTHONPATH=/workspace/g1-bobby/apps/unitree_bridge:/workspace/g1-bobby/packages/contracts:/workspace/g1-bobby/packages/robot_adapters
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -93,7 +93,7 @@ RUN source /opt/ros/humble/setup.bash \
     fi
 
 RUN python3 -m pip install --no-cache-dir --upgrade "pip<26" "setuptools<80" wheel \
-    && python3 -m pip install --no-cache-dir cyclonedds==0.10.2 numpy opencv-python-headless \
+    && python3 -m pip install --no-cache-dir cyclonedds==0.10.2 numpy opencv-python-headless "pydantic>=2.8.0,<3.0.0" \
     && python3 -m pip install --no-cache-dir --no-deps -e /opt/unitree/unitree_sdk2_python
 
 WORKDIR /workspace/g1-bobby
@@ -127,6 +127,13 @@ RUN printf '%s\n' \
     'python3 -m g1_bobby_unitree_bridge.sim "$@"' \
     > /usr/local/bin/g1-bobby-unitree-sim \
     && chmod +x /usr/local/bin/g1-bobby-unitree-sim
+
+RUN printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    'python3 -m g1_bobby_unitree_bridge.publish_live "$@"' \
+    > /usr/local/bin/g1-bobby-unitree-publish-live \
+    && chmod +x /usr/local/bin/g1-bobby-unitree-publish-live
 
 COPY docker/unitree-ros2/entrypoint.sh /usr/local/bin/g1-bobby-unitree-entrypoint
 RUN chmod +x /usr/local/bin/g1-bobby-unitree-entrypoint

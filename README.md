@@ -147,6 +147,13 @@ g1-bobby-unitree-publish-plan-stub --transport sdk_plan_stub --command-json \
   '{"type":"set_mode","seq":1,"timestamp":123.0,"payload":{"mode":"manual"}}'
 ```
 
+Execute through a real transport when the runtime is available:
+
+```bash
+g1-bobby-unitree-publish-live --transport ros2_real --command-json \
+  '{"type":"set_mode","seq":1,"timestamp":123.0,"payload":{"mode":"manual"}}'
+```
+
 The API also exposes the latest accepted dry-run translation at:
 
 ```text
@@ -325,21 +332,20 @@ G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS=true
 `G1_BOBBY_UNITREE_COMMAND_TRANSPORT=ros2_stub` now routes through the bridge-side
 publisher stub instead of the adapter-local dry-run publisher.
 
-`G1_BOBBY_UNITREE_COMMAND_TRANSPORT=ros2_real` now supports partial live ROS2
-publishing for sport requests. When `rclpy` and `unitree_api.msg.Request` are
-available, `set_mode` can publish to `/api/sport/request`. Low-level velocity
-and stop control still remain blocked until the G1 lowcmd path is wired with
-enough confidence.
+`G1_BOBBY_UNITREE_COMMAND_TRANSPORT=ros2_real` now supports live G1 loco
+request publishing over ROS2. When `rclpy` and `unitree_api.msg.Request` are
+available, `set_mode`, `move_velocity`, and `stop` can publish to
+`/api/sport/request`.
 
-That ROS2 skeleton is now narrowed to the current confirmed G1 intents:
+That ROS2 transport is now narrowed to the current confirmed G1 intents:
 
 - `set_mode` -> `/api/sport/request` (`unitree_api/msg/Request`)
-- `move_velocity` / `stop` -> `/lowcmd` (`LowCmd`)
+- `move_velocity` / `stop` -> `/api/sport/request` (`unitree_api/msg/Request`)
 
 At the moment:
 
-- `set_mode` can publish live over ROS2 sport request
-- `move_velocity` / `stop` still fail closed on `ros2_real`
+- `set_mode` maps to confirmed G1 loco FSM requests
+- `move_velocity` / `stop` map to confirmed G1 loco velocity requests
 - `heartbeat` / `estop` still have no confirmed ROS2 publish surface in this repo
 
 The repo now also builds a concrete ROS2 publish-plan skeleton for those

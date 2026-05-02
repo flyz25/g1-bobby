@@ -57,7 +57,7 @@ Inside that adapter boundary, the current repo now supports two transport modes:
 - `disabled`: fail-closed default
 - `dry_run`: publishable Unitree translation path without DDS publish or hardware actuation
 - `ros2_stub`: bridge-side publish stub without DDS publish or hardware actuation
-- `ros2_real`: partial-live ROS2 publisher for confirmed sport-request control; lowcmd control remains blocked
+- `ros2_real`: live G1 loco ROS2 request publisher for confirmed `/api/sport/request` control
 - `sdk_real`: fail-closed Unitree SDK/DDS publisher skeleton that checks `unitree_sdk2py` and then stops until native G1 DDS wiring exists
 
 This is still not the real ROS2 or SDK transport binding. It is the software
@@ -66,18 +66,16 @@ seam that future publisher wiring will implement.
 Current confirmed ROS2 binding intents in the repo are:
 
 - `set_mode` -> `/api/sport/request` with `unitree_api/msg/Request`
-- `move_velocity` -> `/lowcmd` with `LowCmd`
-- `stop` -> `/lowcmd` with `LowCmd`
+- `move_velocity` -> `/api/sport/request` with `unitree_api/msg/Request`
+- `stop` -> `/api/sport/request` with `unitree_api/msg/Request`
 
-At the moment, `ros2_real` can publish `set_mode` live through
-`/api/sport/request` when `rclpy` and `unitree_api.msg.Request` are available.
-`move_velocity` and `stop` still remain blocked on `ros2_real`, and
-`heartbeat` / `estop` still do not have a confirmed ROS2 publish surface in
-this repo.
+At the moment, `ros2_real` can publish `set_mode`, `move_velocity`, and `stop`
+live through `/api/sport/request` when `rclpy` and `unitree_api.msg.Request`
+are available. `heartbeat` / `estop` still do not have a confirmed ROS2
+publish surface in this repo.
 
 The current repo also builds a concrete ROS2 publish-plan skeleton for these
-commands. Live ROS2 publish now exists only for the sport-request `set_mode`
-path.
+commands. Live ROS2 publish now exists for the confirmed G1 loco request path.
 
 Current confirmed Unitree SDK/DDS binding intents in the repo are:
 
@@ -166,6 +164,14 @@ Plan-backed execution stubs, still without live ROS2 or DDS publish:
 docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
   g1-bobby-unitree-publish-plan-stub --transport ros2_plan_stub --command-json \
   '{"type":"move_velocity","seq":3,"timestamp":123.0,"payload":{"linear_x":0.1,"linear_y":0.0,"angular_z":0.0,"duration_ms":100}}'
+```
+
+Live transport execution, when the runtime really exposes the target surface:
+
+```bash
+docker compose -f compose.unitree.yml --profile unitree run --rm unitree-ros2 \
+  g1-bobby-unitree-publish-live --transport ros2_real --command-json \
+  '{"type":"set_mode","seq":1,"timestamp":123.0,"payload":{"mode":"manual"}}'
 ```
 
 At runtime, the API stores the latest accepted dry-run plan and exposes it via:

@@ -26,7 +26,7 @@ async def test_ros2_plan_stub_publisher_emits_ros2_publish_plan() -> None:
         )
         emitted = publisher.emitted_plans()
         assert emitted[0].transport == "ros2_plan_stub"
-        assert emitted[0].target == "/lowcmd"
+        assert emitted[0].target == "/api/sport/request"
     finally:
         await publisher.disconnect()
 

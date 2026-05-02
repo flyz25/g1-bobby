@@ -140,8 +140,9 @@ async def test_unitree_ros2_plan_stub_transport_executes_publish_plan(monkeypatc
             )
         )
         emitted = publisher.emitted_plans()
-        assert emitted[0].target == "/lowcmd"
-        assert emitted[0].payload["velocity"]["linear_x"] == 0.0
+        assert emitted[0].target == "/api/sport/request"
+        assert emitted[0].payload["api_id"] == 7105
+        assert emitted[0].payload["parameter"]["velocity"] == [0.0, 0.0, 0.0]
     finally:
         await adapter.disconnect()
 
@@ -265,6 +266,7 @@ async def test_unitree_disabled_transport_records_blocked_execution_result(monke
 def test_describe_unitree_transport_capability_reports_real_transport_blockers(monkeypatch) -> None:
     monkeypatch.setitem(__import__("sys").modules, "unitree_sdk_for_test", SimpleNamespace())
     monkeypatch.setitem(__import__("sys").modules, "rclpy", SimpleNamespace())
+    monkeypatch.setitem(__import__("sys").modules, "unitree_api.msg", SimpleNamespace())
     capability = describe_unitree_transport_capability(
         UnitreeAdapterConfig(
             network_interface="eth0",
@@ -277,7 +279,6 @@ def test_describe_unitree_transport_capability_reports_real_transport_blockers(m
 
     assert capability.transport == "ros2_real"
     assert capability.environment_ready is True
-    assert capability.binding_implemented is False
+    assert capability.binding_implemented is True
     assert capability.ready is False
     assert "G1_BOBBY_UNITREE_ENABLE_MOTOR_COMMANDS is false" in capability.blockers
-    assert "ros2_real publisher wiring is not implemented yet" in capability.blockers

@@ -72,11 +72,16 @@ def describe_unitree_transport_capability(
             dependency_blockers.append("RMW_IMPLEMENTATION is not rmw_cyclonedds_cpp")
         if not checks.get("rclpy_available"):
             dependency_blockers.append("rclpy is not importable")
+        if not checks.get("unitree_api_request_available"):
+            dependency_blockers.append("unitree_api.msg is not importable")
 
     if transport == "disabled":
         binding_implemented = False
         implementation_blocker = "Unitree command transport is disabled"
-    elif transport in {"ros2_real", "sdk_real"}:
+    elif transport == "ros2_real":
+        binding_implemented = True
+        implementation_blocker = None
+    elif transport == "sdk_real":
         binding_implemented = False
         implementation_blocker = f"{transport} publisher wiring is not implemented yet"
     else:
